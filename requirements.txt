@@ -1,0 +1,13 @@
+osmnx
+networkx
+chromadb
+langchain-anthropic
+langchain-core
+langchain-community
+folium
+streamlit-folium
+wikipedia
+geopandas
+shapely
+pytest
+python-dotenv
