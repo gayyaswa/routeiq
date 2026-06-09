@@ -9,7 +9,7 @@ from langgraph.graph import StateGraph, END
 from routeiq.graph import GraphLoader, RouteGraph, POIFinder
 from routeiq.routing import DetourScorer, POISelector
 from routeiq.insights import QueryParser, NarrativeChain, FallbackChain
-from routeiq.rag import WikipediaFetcher, POIIndexer, POIRetriever
+from routeiq.rag import WikipediaFetcher, POIIndexer, POIRetriever, POIChunker, KnowledgeRAG
 
 _ROUTE_TOO_LONG_MIN = 360.0  # 6 hours
 
@@ -47,6 +47,8 @@ class RoutePipeline:
         wikipedia_fetcher: WikipediaFetcher | None = None,
         poi_indexer: POIIndexer | None = None,
         poi_retriever: POIRetriever | None = None,
+        poi_chunker: POIChunker | None = None,
+        knowledge_rag: KnowledgeRAG | None = None,
     ) -> None:
         self._query_parser = query_parser
         self._graph_loader = graph_loader
@@ -58,6 +60,8 @@ class RoutePipeline:
         self._wikipedia_fetcher = wikipedia_fetcher
         self._poi_indexer = poi_indexer
         self._poi_retriever = poi_retriever
+        self._poi_chunker = poi_chunker
+        self._knowledge_rag = knowledge_rag
         self._graph = self._build_graph()
 
     def run(self, query: str) -> dict:
@@ -191,18 +195,34 @@ class RoutePipeline:
 
         top_pois = state["top_pois"]
 
-        # Enrich each POI with Wikipedia text + thumbnail when fetcher is wired in
+        # Enrich each POI with Wikipedia text + thumbnail
         if self._wikipedia_fetcher is not None:
             for sp in top_pois:
                 self._wikipedia_fetcher.enrich(sp.poi)
 
-        # Index enriched POIs in ChromaDB
-        if self._poi_indexer is not None:
-            pois = [sp.poi for sp in top_pois]
-            self._poi_indexer.index(pois)
+        # If KnowledgeRAG is wired: run 3-stage GraphRAG pipeline
+        if self._knowledge_rag is not None:
+            preferences = state.get("preferences") or []
+            route_coords = state["route_result"].route_coords if state.get("route_result") else []
 
-        # Build rich poi_context string for the narrative prompt
-        poi_context = self._build_poi_context(top_pois)
+            if self._poi_chunker is not None:
+                pois = [sp.poi for sp in top_pois]
+                self._poi_chunker.chunk_and_index(pois)
+
+            poi_context = self._knowledge_rag.query(
+                preferences=preferences,
+                route_coords=route_coords,
+            )
+            # Fall back to plain context if KnowledgeRAG returned nothing
+            if not poi_context:
+                poi_context = self._build_poi_context(top_pois)
+        else:
+            # Legacy path: plain context (used when KnowledgeRAG not wired)
+            if self._poi_indexer is not None:
+                pois = [sp.poi for sp in top_pois]
+                self._poi_indexer.index(pois)
+            poi_context = self._build_poi_context(top_pois)
+
         return {"poi_context": poi_context}
 
     @staticmethod

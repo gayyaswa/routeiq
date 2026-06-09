@@ -2,11 +2,11 @@ from __future__ import annotations
 from typing import Optional
 from langchain_core.language_models import BaseLanguageModel
 
-from routeiq.graph import GraphLoader, POIFinder
+from routeiq.graph import GraphLoader, POIFinder, RouteKnowledgeGraph
 from routeiq.routing import DetourScorer, POISelector
 from routeiq.insights import QueryParser, NarrativeChain, FallbackChain
 from routeiq.insights.prompts import QUERY_PARSER_PROMPT, NARRATIVE_PROMPT, FALLBACK_PROMPT
-from routeiq.rag import WikipediaFetcher, POIIndexer, POIRetriever
+from routeiq.rag import WikipediaFetcher, POIIndexer, POIRetriever, POIChunker, KnowledgeRAG
 from routeiq.pipeline import RoutePipeline
 
 
@@ -24,8 +24,15 @@ class RouteIQFacade:
         wikipedia_fetcher: Optional[WikipediaFetcher] = None,
         poi_indexer: Optional[POIIndexer] = None,
         poi_retriever: Optional[POIRetriever] = None,
+        poi_chunker: Optional[POIChunker] = None,
+        knowledge_rag: Optional[KnowledgeRAG] = None,
+        knowledge_graph: Optional[RouteKnowledgeGraph] = None,
     ) -> None:
         _indexer = poi_indexer or POIIndexer()
+        _kg = knowledge_graph or RouteKnowledgeGraph()
+        _chunker_indexer = POIIndexer(collection_name="routeiq_chunks")
+        _chunker = poi_chunker or POIChunker(_chunker_indexer)
+        _krag = knowledge_rag or KnowledgeRAG(_chunker_indexer, _kg)
         self._pipeline = RoutePipeline(
             query_parser=QueryParser(QUERY_PARSER_PROMPT, llm),
             graph_loader=graph_loader or GraphLoader(),
@@ -37,6 +44,8 @@ class RouteIQFacade:
             wikipedia_fetcher=wikipedia_fetcher or WikipediaFetcher(),
             poi_indexer=_indexer,
             poi_retriever=poi_retriever or POIRetriever(_indexer),
+            poi_chunker=_chunker,
+            knowledge_rag=_krag,
         )
 
     def run(self, query: str) -> dict:

@@ -41,4 +41,27 @@ Instructions:
 - If a stop has no description, rely on the category and name only."""),
 ])
 
-NARRATIVE_PROMPT = NARRATIVE_PROMPT_V2  # active version
+# V3 — Graph-enriched context: city, region, nearby POIs from knowledge graph traversal
+NARRATIVE_PROMPT_V3 = ChatPromptTemplate.from_messages([
+    ("system", SYSTEM_PROMPT),
+    ("human", """Generate a scenic route narrative for the following trip.
+
+Origin: {origin}
+Destination: {destination}
+Total distance: {distance_km} km
+Estimated drive time: {drive_time_min} minutes
+
+Recommended stops (graph-verified: spatially on route, Wikipedia-enriched):
+{poi_context}
+
+Each stop is formatted as:
+  name | category | city | region | nearby stops | description excerpt
+
+Instructions:
+- Write an engaging opening narrative (3-5 sentences) that captures the character of the route and region.
+- List each stop: name | detour time | one sentence why to visit, drawn from the description.
+- Mention the region where it adds flavour (e.g. "deep in the Hill Country").
+- Ground every fact in the provided context. Do not invent locations or distances."""),
+])
+
+NARRATIVE_PROMPT = NARRATIVE_PROMPT_V3  # active version
