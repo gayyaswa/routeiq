@@ -1,9 +1,10 @@
-osmnx
+osmnx>=2.0
 networkx
 chromadb
 langchain-anthropic
 langchain-core
 langchain-community
+langgraph
 folium
 streamlit-folium
 wikipedia
