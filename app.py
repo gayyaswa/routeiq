@@ -18,6 +18,9 @@ from eval.evaluator import _BAY_AREA_SEED_POIS
 
 load_dotenv()
 
+import osmnx as ox
+ox.settings.overpass_endpoint = "https://overpass.kumi.systems/api/interpreter"
+
 st.set_page_config(
     page_title="RouteIQ — Scenic Route Intelligence",
     layout="wide",
