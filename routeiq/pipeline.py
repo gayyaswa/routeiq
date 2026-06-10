@@ -62,9 +62,11 @@ class RoutePipeline:
         self._poi_retriever = poi_retriever
         self._poi_chunker = poi_chunker
         self._knowledge_rag = knowledge_rag
+        self._progress = lambda step, sub: None  # replaced per-run by on_progress
         self._graph = self._build_graph()
 
-    def run(self, query: str) -> dict:
+    def run(self, query: str, on_progress=None) -> dict:
+        self._progress = on_progress or (lambda step, sub: None)
         initial: PipelineState = {
             "query": query,
             "origin": None,
@@ -106,6 +108,7 @@ class RoutePipeline:
     # ── nodes ──────────────────────────────────────────────────────────────
 
     def _parse_node(self, state: PipelineState) -> dict:
+        self._progress("parse", "Sending query to Claude…")
         result = self._query_parser.parse(state["query"])
         if "_parse_error" in result:
             return {
@@ -115,15 +118,20 @@ class RoutePipeline:
                     f"Detail: {result['_parse_error']}"
                 ),
             }
+        origin = result.get("origin")
+        destination = result.get("destination")
+        self._progress("parse", f"Parsed: {origin} → {destination}")
         return {
-            "origin": result.get("origin"),
-            "destination": result.get("destination"),
+            "origin": origin,
+            "destination": destination,
             "preferences": result.get("preferences", []),
         }
 
     def _graph_node(self, state: PipelineState) -> dict:
+        self._progress("graph", f"Geocoding {state['origin']}…")
         try:
             origin_lat, origin_lon = ox.geocode(state["origin"])
+            self._progress("graph", f"Geocoding {state['destination']}…")
             dest_lat, dest_lon = ox.geocode(state["destination"])
         except Exception as e:
             return {
@@ -139,8 +147,10 @@ class RoutePipeline:
         east  = max(origin_lon, dest_lon) + _PAD
         west  = min(origin_lon, dest_lon) - _PAD
 
+        self._progress("graph", "Loading OSM road network…")
         G = self._graph_loader.load(north=north, south=south, east=east, west=west)
 
+        self._progress("graph", "Computing A* shortest path…")
         try:
             rg = RouteGraph(G)
             route_result = rg.find_route(origin_lat, origin_lon, dest_lat, dest_lon)
@@ -169,9 +179,12 @@ class RoutePipeline:
                 "route_result": route_result,
             }
 
+        self._progress("graph", "Scanning route corridor for POIs…")
         pois = self._poi_finder.find_pois(route_result.route_coords)
+        self._progress("graph", f"Scoring {len(pois)} POIs by detour cost…")
         scored = self._detour_scorer.score(pois, route_result.route_coords)
         top_pois = self._poi_selector.select(scored, preferences=state.get("preferences") or [])
+        self._progress("graph", f"Selected {len(top_pois)} scenic stops")
 
         return {
             "origin_lat": origin_lat,
@@ -195,22 +208,17 @@ class RoutePipeline:
 
         top_pois = state["top_pois"]
 
-        # Enrich each POI with Wikipedia text + thumbnail
+        # Enrich each POI with Wikipedia text + thumbnail.
+        # POIs without descriptions are kept — Claude narrates from name + category
+        # rather than triggering a full fallback for missing enrichment data.
         if self._wikipedia_fetcher is not None:
+            self._progress("rag", "Enriching POIs with Wikipedia…")
             for sp in top_pois:
+                self._progress("rag", f"Fetching {sp.poi.name}…")
                 self._wikipedia_fetcher.enrich(sp.poi)
 
-        # Drop POIs that have no description after enrichment — they produce
-        # unhelpful "no information available" narrative text
-        top_pois = [sp for sp in top_pois if sp.poi.description]
-        if not top_pois:
-            return {
-                "error": "no_pois_found",
-                "fallback_reason": (
-                    f"Scenic stops were found near the route but none had "
-                    f"available descriptions to recommend. Try a different query."
-                ),
-            }
+        enriched = sum(1 for sp in top_pois if sp.poi.description)
+        self._progress("rag", f"Enriched {enriched}/{len(top_pois)} stops with Wikipedia descriptions")
 
         # If KnowledgeRAG is wired: run 3-stage GraphRAG pipeline
         if self._knowledge_rag is not None:
@@ -218,9 +226,11 @@ class RoutePipeline:
             route_coords = state["route_result"].route_coords if state.get("route_result") else []
 
             if self._poi_chunker is not None:
+                self._progress("rag", "Chunking POI descriptions…")
                 pois = [sp.poi for sp in top_pois]
                 self._poi_chunker.chunk_and_index(pois)
 
+            self._progress("rag", "Running 3-stage GraphRAG retrieval…")
             poi_context = self._knowledge_rag.query(
                 preferences=preferences,
                 route_coords=route_coords,
@@ -230,6 +240,7 @@ class RoutePipeline:
                 poi_context = self._build_poi_context(top_pois)
         else:
             # Legacy path: plain context (used when KnowledgeRAG not wired)
+            self._progress("rag", "Indexing stops in ChromaDB…")
             if self._poi_indexer is not None:
                 pois = [sp.poi for sp in top_pois]
                 self._poi_indexer.index(pois)
@@ -249,6 +260,7 @@ class RoutePipeline:
         return "\n\n".join(lines)
 
     def _narrate_node(self, state: PipelineState) -> dict:
+        self._progress("narrate", "Generating route narrative with Claude…")
         if state.get("error"):
             narrative = self._fallback_chain.generate(
                 reason=state.get("fallback_reason", state["error"]),

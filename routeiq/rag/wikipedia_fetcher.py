@@ -8,7 +8,7 @@ from routeiq.graph.poi import POI
 _SUMMARY_URL = "https://en.wikipedia.org/api/rest_v1/page/summary/{title}"
 _SEARCH_URL = "https://en.wikipedia.org/w/api.php"
 _DESCRIPTION_MAX_CHARS = 500
-_REQUEST_TIMEOUT = 5
+_REQUEST_TIMEOUT = 15  # Wikipedia API can respond slowly; 5s caused silent enrichment failures
 
 
 class WikipediaFetcher:
@@ -46,13 +46,15 @@ class WikipediaFetcher:
             tag = poi.wikipedia_tag
             return tag.split(":", 1)[-1] if ":" in tag else tag
 
-        # name-based fallback via MediaWiki opensearch
+        # name-based fallback via MediaWiki opensearch.
+        # Appending "California" dramatically improves disambiguation — bare POI names
+        # like "Lighthouse" or "Adobe" resolve to generic articles with empty extracts.
         try:
             resp = self._session.get(
                 _SEARCH_URL,
                 params={
                     "action": "opensearch",
-                    "search": poi.name,
+                    "search": f"{poi.name} California",
                     "limit": 1,
                     "namespace": 0,
                     "format": "json",

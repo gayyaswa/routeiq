@@ -48,6 +48,6 @@ class RouteIQFacade:
             knowledge_rag=_krag,
         )
 
-    def run(self, query: str) -> dict:
+    def run(self, query: str, on_progress=None) -> dict:
         """Run the full pipeline for a natural language route query."""
-        return self._pipeline.run(query)
+        return self._pipeline.run(query, on_progress=on_progress)

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import threading
 
 import streamlit as st
 from streamlit_folium import st_folium
@@ -9,6 +10,7 @@ from dotenv import load_dotenv
 from langchain_anthropic import ChatAnthropic
 
 from routeiq.facade import RouteIQFacade
+from routeiq.graph import GraphLoader
 from routeiq.rag import POIIndexer, VectorBaseline
 from routeiq.ui import MapBuilder
 from routeiq.ui.card_renderer import render_stop_card
@@ -22,7 +24,6 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# Minimal global style overrides
 st.markdown(
     """
     <style>
@@ -35,25 +36,113 @@ st.markdown(
 )
 
 
+# ── Vertical stepper renderer ─────────────────────────────────────────────────
+
+_STEPPER_CSS = """
+<style>
+.riq-stepper{font-family:-apple-system,BlinkMacSystemFont,sans-serif;padding:16px 4px;}
+.riq-step{display:flex;align-items:flex-start;margin-bottom:4px;}
+.riq-icon{font-size:18px;min-width:30px;line-height:1.6;}
+.riq-icon.riq-blink{animation:riq-pulse 1s ease-in-out infinite;}
+.riq-label{font-size:15px;font-weight:500;line-height:1.6;}
+.riq-label.riq-done{color:#22c55e;}
+.riq-label.riq-active{color:#3b82f6;}
+.riq-label.riq-pending{color:#9ca3af;}
+.riq-subtask{font-size:13px;color:#6b7280;font-style:italic;margin-left:30px;margin-bottom:6px;}
+.riq-connector{width:2px;height:14px;background:#e5e7eb;margin-left:13px;margin-bottom:4px;}
+@keyframes riq-pulse{0%,100%{opacity:1}50%{opacity:0.2}}
+</style>
+"""
+
+_STEPS = [
+    ("parse",   "Parsing your query",                  "🔍"),
+    ("graph",   "Building route",                      "🗺️"),
+    ("rag",     "Enriching with Wikipedia + GraphRAG", "📚"),
+    ("narrate", "Generating narrative",                "✍️"),
+]
+
+
+def _render_stepper(state: dict) -> str:
+    current = state.get("current")
+    done = state.get("done", set())
+    subtask = state.get("subtask", "")
+
+    rows = [_STEPPER_CSS, '<div class="riq-stepper">']
+    for i, (step_id, label, icon) in enumerate(_STEPS):
+        if step_id in done:
+            icon_cls, label_cls, display_icon = "", "riq-done", "✅"
+        elif step_id == current:
+            icon_cls, label_cls, display_icon = "riq-blink", "riq-active", icon
+        else:
+            icon_cls, label_cls, display_icon = "", "riq-pending", "⭕"
+
+        rows.append(
+            f'<div class="riq-step">'
+            f'<span class="riq-icon {icon_cls}">{display_icon}</span>'
+            f'<span class="riq-label {label_cls}">{label}</span>'
+            f'</div>'
+        )
+        if step_id == current and subtask:
+            rows.append(f'<div class="riq-subtask">{subtask}</div>')
+        if i < len(_STEPS) - 1:
+            rows.append('<div class="riq-connector"></div>')
+
+    rows.append('</div>')
+    return "".join(rows)
+
+
+# ── Background graph preload ──────────────────────────────────────────────────
+
+# Pre-warm the 4 Day-5 demo route corridors so the OSM graphs are cached before
+# the first user query. Each bbox covers origin→destination + 0.1° padding.
+_DEMO_BBOXES = [
+    dict(north=37.9, south=36.5, east=-121.7, west=-122.6),  # SF → Monterey
+    dict(north=38.5, south=37.6, east=-122.1, west=-122.6),  # SF → Napa
+    dict(north=37.5, south=36.8, east=-121.7, west=-122.2),  # SJ → Santa Cruz
+    dict(north=37.9, south=37.3, east=-122.2, west=-122.6),  # SF → Half Moon Bay
+]
+
+
+def _preload_graphs(loader: GraphLoader) -> None:
+    for bbox in _DEMO_BBOXES:
+        try:
+            loader.load(**bbox)
+        except Exception:
+            pass  # best-effort; pipeline loads on demand if this fails
+
+
 @st.cache_resource
 def _load_resources():
     """Build and cache all RouteIQ components for the process lifetime."""
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     llm = ChatAnthropic(model="claude-sonnet-4-6", api_key=api_key or None)
     shared_indexer = POIIndexer()
-    facade = RouteIQFacade(llm, poi_indexer=shared_indexer)
+    graph_loader = GraphLoader()
+    facade = RouteIQFacade(llm, poi_indexer=shared_indexer, graph_loader=graph_loader)
     vbaseline = VectorBaseline(shared_indexer)
     builder = MapBuilder()
-    return facade, vbaseline, builder
+
+    preload_thread = threading.Thread(
+        target=_preload_graphs, args=(graph_loader,), daemon=True
+    )
+    preload_thread.start()
+    return facade, vbaseline, builder, preload_thread
 
 
-facade, vector_baseline, map_builder = _load_resources()
+facade, vector_baseline, map_builder, _preload_thread = _load_resources()
 
 
 # ── Header ────────────────────────────────────────────────────────────────────
 
 st.title("🗺 RouteIQ")
 st.caption("Scenic route intelligence · GraphRAG + Wikipedia · Bay Area & beyond")
+
+if _preload_thread.is_alive():
+    st.info(
+        "🔄 Pre-loading map data for demo routes in the background — "
+        "first query may take 2–3 min if it hits an uncached corridor.",
+        icon=None,
+    )
 
 # ── Query input ───────────────────────────────────────────────────────────────
 
@@ -65,8 +154,22 @@ query_input = st.text_input(
 run_btn = st.button("Find Scenic Stops ›", type="primary")
 
 if run_btn and query_input.strip():
-    with st.spinner("Finding your scenic route…"):
-        state = facade.run(query_input.strip())
+    stepper_placeholder = st.empty()
+    _step_state: dict = {"current": None, "done": set(), "subtask": ""}
+
+    def _on_progress(step: str, subtask: str) -> None:
+        if _step_state["current"] and _step_state["current"] != step:
+            _step_state["done"].add(_step_state["current"])
+        _step_state["current"] = step
+        _step_state["subtask"] = subtask
+        stepper_placeholder.markdown(_render_stepper(_step_state), unsafe_allow_html=True)
+
+    state = facade.run(query_input.strip(), on_progress=_on_progress)
+
+    _step_state["done"] = {s[0] for s in _STEPS}
+    _step_state["current"] = None
+    stepper_placeholder.empty()
+
     st.session_state["result"] = state
     st.session_state["last_query"] = query_input.strip()
 

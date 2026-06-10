@@ -24,6 +24,13 @@ class POIFinder:
             "viewpoint", "museum", "attraction", "aquarium", "zoo",
             "theme_park", "lighthouse", "monument",
         ]
+        # Explicit historic subtypes with reliable Wikipedia coverage.
+        # "historic: True" returned thousands of minor features (roads, fences, districts)
+        # whose names don't resolve to Wikipedia articles, breaking enrichment entirely.
+        _SCENIC_HISTORIC = [
+            "castle", "fort", "monument", "memorial", "ruins",
+            "archaeological_site", "lighthouse", "manor", "battlefield",
+        ]
         # Natural subtypes worth visiting on a road trip
         _SCENIC_NATURAL = [
             "peak", "volcano", "beach", "cape", "cliff", "waterfall",
@@ -31,7 +38,7 @@ class POIFinder:
         ]
         tags = {
             "tourism": _SCENIC_TOURISM,
-            "historic": True,
+            "historic": _SCENIC_HISTORIC,
             "natural": _SCENIC_NATURAL,
         }
         minx, miny, maxx, maxy = buffer_poly.bounds
