@@ -19,7 +19,8 @@ from eval.evaluator import _BAY_AREA_SEED_POIS
 load_dotenv()
 
 import osmnx as ox
-ox.settings.overpass_endpoint = "https://overpass.kumi.systems/api/interpreter"
+# OSMnx 2.x uses overpass_url (not overpass_endpoint which silently does nothing)
+ox.settings.overpass_url = "https://overpass.kumi.systems/api"
 
 st.set_page_config(
     page_title="RouteIQ — Scenic Route Intelligence",
