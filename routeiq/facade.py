@@ -51,3 +51,21 @@ class RouteIQFacade:
     def run(self, query: str, on_progress=None) -> dict:
         """Run the full pipeline for a natural language route query."""
         return self._pipeline.run(query, on_progress=on_progress)
+
+    def generate_narrative(
+        self,
+        origin: str,
+        destination: str,
+        distance_km: float,
+        drive_time_min: float,
+        poi_context: str,
+    ) -> str:
+        """Generate a narrative from arbitrary POI context — used for vector baseline view."""
+        return self._pipeline._narrative_chain.generate(
+            origin=origin,
+            destination=destination,
+            distance_km=distance_km,
+            drive_time_min=drive_time_min,
+            top_pois=[],
+            poi_context=poi_context,
+        )
