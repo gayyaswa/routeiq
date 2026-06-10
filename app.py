@@ -14,6 +14,7 @@ from routeiq.graph import GraphLoader
 from routeiq.rag import POIIndexer, VectorBaseline
 from routeiq.ui import MapBuilder
 from routeiq.ui.card_renderer import render_stop_card
+from eval.evaluator import _BAY_AREA_SEED_POIS
 
 load_dotenv()
 
@@ -116,10 +117,16 @@ def _load_resources():
     """Build and cache all RouteIQ components for the process lifetime."""
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     llm = ChatAnthropic(model="claude-sonnet-4-6", api_key=api_key or None)
-    shared_indexer = POIIndexer()
+    shared_indexer = POIIndexer()  # GraphRAG pipeline — indexes on-route POIs per query
     graph_loader = GraphLoader()
     facade = RouteIQFacade(llm, poi_indexer=shared_indexer, graph_loader=graph_loader)
-    vbaseline = VectorBaseline(shared_indexer)
+
+    # Vector baseline gets its own collection pre-seeded with Bay Area landmarks so it
+    # searches a broad regional corpus, never just the last route's POIs.
+    vector_indexer = POIIndexer(collection_name="routeiq_vector_baseline")
+    vector_indexer.index(_BAY_AREA_SEED_POIS)
+    vbaseline = VectorBaseline(vector_indexer)
+
     builder = MapBuilder()
 
     preload_thread = threading.Thread(
