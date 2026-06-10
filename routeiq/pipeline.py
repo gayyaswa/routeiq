@@ -1,6 +1,7 @@
 """LangGraph state machine orchestrating parse → graph → rag → narrate nodes (Pipeline pattern)."""
 from __future__ import annotations
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Optional
 
 import osmnx as ox
@@ -237,11 +238,15 @@ class RoutePipeline:
 
         if self._wikipedia_fetcher is not None:
             self._progress("rag", "Enriching POIs with Wikipedia…")
-            for sp in top_pois:
-                t1 = time.perf_counter()
-                self._progress("rag", f"Fetching {sp.poi.name}…")
-                self._wikipedia_fetcher.enrich(sp.poi)
-                print(f"[timing]   wikipedia {sp.poi.name!r}: {time.perf_counter()-t1:.2f}s", flush=True)
+            t1 = time.perf_counter()
+            # Each thread gets a fresh WikipediaFetcher (own Session) — safe for parallel I/O
+            def _enrich(sp):
+                from routeiq.rag import WikipediaFetcher as _WF
+                _WF().enrich(sp.poi)
+
+            with ThreadPoolExecutor(max_workers=min(5, len(top_pois))) as pool:
+                list(pool.map(_enrich, top_pois))
+            print(f"[timing]   wikipedia ({len(top_pois)} POIs parallel): {time.perf_counter()-t1:.2f}s", flush=True)
 
         enriched = sum(1 for sp in top_pois if sp.poi.description)
         self._progress("rag", f"Enriched {enriched}/{len(top_pois)} stops with Wikipedia descriptions")
@@ -299,14 +304,17 @@ class RoutePipeline:
             )
         else:
             route_result = state["route_result"]
-            narrative = self._narrative_chain.generate(
+            narrative = ""
+            for chunk in self._narrative_chain.stream(
                 origin=state["origin"],
                 destination=state["destination"],
                 distance_km=route_result.length_km,
                 drive_time_min=route_result.drive_time_min,
                 top_pois=state.get("top_pois") or [],
                 poi_context=state.get("poi_context"),
-            )
+            ):
+                narrative += chunk
+                self._progress("narrate_stream", chunk)
         print(f"[timing] narrate node total: {time.perf_counter()-t0:.2f}s", flush=True)
         return {"narrative": narrative}
 

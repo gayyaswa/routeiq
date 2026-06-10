@@ -1,6 +1,5 @@
-import os
-import tempfile
-from unittest.mock import MagicMock, call, patch
+import pickle
+from unittest.mock import patch
 
 import networkx as nx
 import pytest
@@ -22,35 +21,27 @@ def _mock_graph():
 
 
 class TestGraphLoaderCacheMiss:
-    def test_downloads_and_saves_on_cache_miss(self, tmploader):
+    def test_downloads_and_saves_on_cache_miss(self, tmploader, tmp_path):
         fake_graph = _mock_graph()
-        with (
-            patch("osmnx.graph_from_bbox", return_value=fake_graph) as mock_dl,
-            patch("osmnx.save_graphml") as mock_save,
-        ):
+        with patch("osmnx.graph_from_bbox", return_value=fake_graph):
             G = tmploader.load(north=30.350, south=29.320, east=-97.600, west=-98.600)
 
-        mock_dl.assert_called_once()
-        mock_save.assert_called_once()
+        pkl_files = list(tmp_path.glob("*.pkl"))
+        assert len(pkl_files) == 1
         assert G is fake_graph
 
-    def test_cache_key_format(self, tmploader):
+    def test_cache_key_format(self, tmploader, tmp_path):
         fake_graph = _mock_graph()
-        with (
-            patch("osmnx.graph_from_bbox", return_value=fake_graph),
-            patch("osmnx.save_graphml") as mock_save,
-        ):
+        with patch("osmnx.graph_from_bbox", return_value=fake_graph):
             tmploader.load(north=30.350, south=29.320, east=-97.600, west=-98.600)
 
-        saved_path = mock_save.call_args[0][1]
-        assert "n30.350_s29.320_e-97.600_w-98.600" in saved_path
+        pkl_files = list(tmp_path.glob("*.pkl"))
+        assert len(pkl_files) == 1
+        assert "n30.350_s29.320_e-97.600_w-98.600" in pkl_files[0].name
 
     def test_different_bboxes_trigger_two_downloads(self, tmploader):
         fake_graph = _mock_graph()
-        with (
-            patch("osmnx.graph_from_bbox", return_value=fake_graph) as mock_dl,
-            patch("osmnx.save_graphml"),
-        ):
+        with patch("osmnx.graph_from_bbox", return_value=fake_graph) as mock_dl:
             tmploader.load(north=30.350, south=29.320, east=-97.600, west=-98.600)
             tmploader.load(north=31.000, south=30.000, east=-97.000, west=-98.000)
 
@@ -58,13 +49,25 @@ class TestGraphLoaderCacheMiss:
 
 
 class TestGraphLoaderDiskHit:
-    def test_loads_from_disk_on_second_process(self, tmp_path):
+    def test_loads_from_pkl_on_second_process(self, tmp_path):
         fake_graph = _mock_graph()
         key = "n30.350_s29.320_e-97.600_w-98.600"
-        fake_path = str(tmp_path / f"{key}.graphml")
+        pkl_path = tmp_path / f"{key}.pkl"
+        with open(pkl_path, "wb") as f:
+            pickle.dump(fake_graph, f)
 
-        # simulate file already on disk
-        open(fake_path, "w").close()
+        loader = GraphLoader(cache_dir=str(tmp_path))
+        with patch("osmnx.graph_from_bbox") as mock_dl:
+            G = loader.load(north=30.350, south=29.320, east=-97.600, west=-98.600)
+
+        mock_dl.assert_not_called()
+        assert set(G.nodes) == set(fake_graph.nodes)
+
+    def test_migrates_graphml_to_pkl(self, tmp_path):
+        fake_graph = _mock_graph()
+        key = "n30.350_s29.320_e-97.600_w-98.600"
+        graphml_path = tmp_path / f"{key}.graphml"
+        graphml_path.touch()
 
         loader = GraphLoader(cache_dir=str(tmp_path))
         with (
@@ -75,16 +78,15 @@ class TestGraphLoaderDiskHit:
 
         mock_load.assert_called_once()
         mock_dl.assert_not_called()
+        # Pickle file written as migration artifact
+        assert (tmp_path / f"{key}.pkl").exists()
         assert G is fake_graph
 
 
 class TestGraphLoaderInMemoryCache:
     def test_second_call_same_bbox_downloads_once(self, tmploader):
         fake_graph = _mock_graph()
-        with (
-            patch("osmnx.graph_from_bbox", return_value=fake_graph) as mock_dl,
-            patch("osmnx.save_graphml"),
-        ):
+        with patch("osmnx.graph_from_bbox", return_value=fake_graph) as mock_dl:
             G1 = tmploader.load(north=30.350, south=29.320, east=-97.600, west=-98.600)
             G2 = tmploader.load(north=30.350, south=29.320, east=-97.600, west=-98.600)
 

@@ -5,25 +5,23 @@ import os
 import time
 import threading
 
-import streamlit as st
-from streamlit_folium import st_folium
-from dotenv import load_dotenv
-
-from routeiq.graph import GraphLoader
-from routeiq.ui import MapBuilder
-from routeiq.ui.card_renderer import render_stop_card
-
-load_dotenv()
-
-import osmnx as ox
-
+# _T0 must come before ALL third-party imports — osmnx/pandas/shapely import chains
+# previously took 25-30s silently before the timer was set.
 _T0 = time.perf_counter()
+
 def _log(msg: str) -> None:
     print(f"[{time.perf_counter()-_T0:6.2f}s] {msg}", flush=True)
-# OSMnx 2.x uses overpass_url (not overpass_endpoint which silently does nothing)
-ox.settings.overpass_url = "https://overpass.kumi.systems/api"
-ox.settings.overpass_rate_limit = False   # skip the /status pre-check that times out at 180s
-ox.settings.requests_timeout = 45         # fail fast per mirror instead of hanging
+
+_log("import: streamlit")
+import streamlit as st
+_log("import: streamlit_folium")
+from streamlit_folium import st_folium
+_log("import: dotenv")
+from dotenv import load_dotenv
+load_dotenv()
+_log("import: routeiq.ui.card_renderer")
+from routeiq.ui.card_renderer import render_stop_card
+_log("imports: light done")
 
 st.set_page_config(
     page_title="RouteIQ — Scenic Route Intelligence",
@@ -121,8 +119,20 @@ def _preload_graphs(loader: GraphLoader) -> None:
 
 @st.cache_resource
 def _load_lightweight():
-    """Lightweight init — runs at page load so the UI appears instantly."""
-    _log("_load_lightweight: start")
+    """Deferred heavy init — osmnx/pandas/shapely imported here, not at module scope."""
+    _log("_load_lightweight: start (heavy imports)")
+    import osmnx as ox
+    _log("_load_lightweight: osmnx done")
+    from routeiq.graph import GraphLoader
+    from routeiq.ui import MapBuilder
+    _log("_load_lightweight: routeiq graph+ui done")
+
+    ox.settings.overpass_url = "https://lz4.overpass-api.de/api"
+    ox.settings.overpass_rate_limit = False
+    ox.settings.requests_timeout = 30        # per-attempt HTTP timeout
+    ox.settings.requests_max_retries = 0     # no OSMnx-internal retries; our mirror loop handles failover
+    ox.settings.overpass_settings = "[out:json][timeout:28]"  # server-side limit < client limit
+
     graph_loader = GraphLoader()
     _log("_load_lightweight: GraphLoader done")
     builder = MapBuilder()
@@ -168,9 +178,14 @@ def _load_heavy():
     return facade, vbaseline
 
 
-_log("module top-level: before _load_lightweight()")
-_graph_loader, map_builder, _preload_thread = _load_lightweight()
-_log("module top-level: _load_lightweight() returned")
+_log("starting background init thread")
+_bg_init_thread = threading.Thread(
+    target=lambda: _load_lightweight(),
+    daemon=True,
+    name="routeiq-bg-init",
+)
+_bg_init_thread.start()
+_log("background init thread started — page renders now")
 
 
 # ── Header ────────────────────────────────────────────────────────────────────
@@ -178,10 +193,10 @@ _log("module top-level: _load_lightweight() returned")
 st.title("🗺 RouteIQ")
 st.caption("Scenic route intelligence · GraphRAG + Wikipedia · Bay Area & beyond")
 
-if _preload_thread.is_alive():
+if _bg_init_thread.is_alive():
     st.info(
-        "🔄 Pre-loading map data for demo routes in the background — "
-        "first query may take 2–3 min if it hits an uncached corridor.",
+        "⏳ Loading RouteIQ components in the background — "
+        "first query starts once loading finishes (~15–30 s).",
         icon=None,
     )
 
@@ -198,9 +213,19 @@ if run_btn and query_input.strip():
     facade, vector_baseline = _load_heavy()
 
     stepper_placeholder = st.empty()
+    narrative_stream_placeholder = st.empty()
     _step_state: dict = {"current": None, "done": set(), "subtask": ""}
+    _narrative_buffer = [""]
 
     def _on_progress(step: str, subtask: str) -> None:
+        if step == "narrate_stream":
+            _narrative_buffer[0] += subtask
+            narrative_stream_placeholder.markdown(
+                f'<div style="font-size:14px;line-height:1.7;color:#1f2937">'
+                f'{_narrative_buffer[0]}</div>',
+                unsafe_allow_html=True,
+            )
+            return
         if _step_state["current"] and _step_state["current"] != step:
             _step_state["done"].add(_step_state["current"])
         _step_state["current"] = step
@@ -212,6 +237,7 @@ if run_btn and query_input.strip():
     _step_state["done"] = {s[0] for s in _STEPS}
     _step_state["current"] = None
     stepper_placeholder.empty()
+    narrative_stream_placeholder.empty()
 
     st.session_state["result"] = state
     st.session_state["last_query"] = query_input.strip()
@@ -274,7 +300,8 @@ map_col, card_col = st.columns([3, 2], gap="medium")
 filtered_pois = [sp for sp in top_pois if sp.poi.category in selected_cats]
 
 with map_col:
-    folium_map = map_builder.build(
+    _, _map_builder, _ = _load_lightweight()  # cached — instant by the time results render
+    folium_map = _map_builder.build(
         route_result, top_pois, filtered_categories=selected_cats
     )
     st_folium(folium_map, height=500, use_container_width=True, returned_objects=[])

@@ -3,11 +3,14 @@ import json
 import os
 import time
 import dataclasses
+import threading
 import pandas as pd
 import osmnx as ox
 from shapely.geometry import LineString
 from routeiq.graph.poi import POI
 from routeiq.graph.graph_loader import _OVERPASS_MIRRORS
+
+_PER_MIRROR_TIMEOUT = 30  # hard wall-clock limit per Overpass attempt, independent of OSMnx retry logic
 
 
 class POIFinder:
@@ -66,14 +69,30 @@ class POIFinder:
         gdf = None
         for mirror in _OVERPASS_MIRRORS:
             t1 = time.perf_counter()
-            try:
-                ox.settings.overpass_url = mirror
-                gdf = ox.features_from_bbox(bbox=(minx, miny, maxx, maxy), tags=tags)
-                print(f"[timing]     overpass {mirror}: {time.perf_counter()-t1:.2f}s → {len(gdf)} rows", flush=True)
-                break
-            except Exception as e:
-                print(f"[timing]     overpass {mirror}: FAILED after {time.perf_counter()-t1:.2f}s ({e})", flush=True)
+            result_holder: list = [None]
+            error_holder: list = [None]
+
+            def _fetch(m=mirror, rh=result_holder, eh=error_holder):
+                try:
+                    ox.settings.overpass_url = m
+                    rh[0] = ox.features_from_bbox(bbox=(minx, miny, maxx, maxy), tags=tags)
+                except Exception as exc:
+                    eh[0] = exc
+
+            fetch_thread = threading.Thread(target=_fetch, daemon=True)
+            fetch_thread.start()
+            fetch_thread.join(timeout=_PER_MIRROR_TIMEOUT)
+
+            elapsed = time.perf_counter() - t1
+            if fetch_thread.is_alive():
+                print(f"[timing]     overpass {mirror}: TIMEOUT after {elapsed:.1f}s → next mirror", flush=True)
                 continue
+            if error_holder[0] is not None:
+                print(f"[timing]     overpass {mirror}: FAILED after {elapsed:.2f}s ({error_holder[0]})", flush=True)
+                continue
+            gdf = result_holder[0]
+            print(f"[timing]     overpass {mirror}: {elapsed:.2f}s → {len(gdf)} rows", flush=True)
+            break
         if gdf is None:
             return []
 

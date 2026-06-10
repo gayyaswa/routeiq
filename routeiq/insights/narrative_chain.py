@@ -1,4 +1,5 @@
 from __future__ import annotations
+from collections.abc import Iterator
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
@@ -22,6 +23,24 @@ class NarrativeChain:
         poi_context: str | None = None,
     ) -> str:
         return self._chain.invoke({
+            "origin": origin,
+            "destination": destination,
+            "distance_km": f"{distance_km:.1f}",
+            "drive_time_min": f"{drive_time_min:.0f}",
+            "poi_context": poi_context if poi_context is not None else self._format_poi_context(top_pois),
+        })
+
+    def stream(
+        self,
+        origin: str,
+        destination: str,
+        distance_km: float,
+        drive_time_min: float,
+        top_pois: list[ScoredPOI],
+        *,
+        poi_context: str | None = None,
+    ) -> Iterator[str]:
+        yield from self._chain.stream({
             "origin": origin,
             "destination": destination,
             "distance_km": f"{distance_km:.1f}",

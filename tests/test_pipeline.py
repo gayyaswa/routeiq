@@ -217,7 +217,7 @@ class TestNarrateNode:
 
     def test_success_state_calls_narrative_chain(self):
         p = _make_pipeline()
-        p._narrative_chain.generate.return_value = "A lovely scenic drive..."
+        p._narrative_chain.stream.return_value = iter(["A lovely scenic drive..."])
         state = _base_state(
             origin="Austin, TX",
             destination="San Antonio, TX",
@@ -225,7 +225,7 @@ class TestNarrateNode:
             top_pois=[_fake_scored_poi()],
         )
         result = p._narrate_node(state)
-        p._narrative_chain.generate.assert_called_once()
+        p._narrative_chain.stream.assert_called_once()
         assert result["narrative"] == "A lovely scenic drive..."
 
     def test_narrative_key_in_result(self):

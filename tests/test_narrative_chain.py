@@ -40,6 +40,17 @@ class TestNarrativeChainGenerate:
         assert len(result) > 0
 
 
+class TestNarrativeChainStream:
+    def test_stream_yields_strings(self, chain, sample_top_pois):
+        chunks = list(chain.stream("Austin, TX", "San Antonio, TX", 120.0, 144.0, sample_top_pois))
+        assert len(chunks) > 0
+        assert all(isinstance(c, str) for c in chunks)
+
+    def test_stream_joined_equals_full_narrative(self, chain, sample_top_pois):
+        chunks = list(chain.stream("Austin, TX", "San Antonio, TX", 120.0, 144.0, sample_top_pois))
+        assert "".join(chunks) == _NARRATIVE
+
+
 class TestNarrativeChainFormatPOIContext:
     def test_empty_pois_returns_no_stops_message(self):
         context = NarrativeChain._format_poi_context([])
