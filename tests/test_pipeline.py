@@ -54,7 +54,14 @@ def _fake_route_result(drive_time_min=144.0, length_km=120.0):
 
 
 def _fake_poi():
-    return POI(name="Alamo", category="historic", lat=29.42, lon=-98.48, osm_id="1")
+    return POI(
+        name="Alamo",
+        category="historic",
+        lat=29.42,
+        lon=-98.48,
+        osm_id="1",
+        description="18th-century Spanish colonial mission and site of the 1836 Battle of the Alamo.",
+    )
 
 
 def _fake_scored_poi():

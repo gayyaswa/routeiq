@@ -19,7 +19,21 @@ class POIFinder:
         buffer_deg = self._buffer_km / 111.0
         buffer_poly = line.buffer(buffer_deg)
 
-        tags = {"tourism": True, "historic": True, "natural": True}
+        # Scenic tourism subtypes only — excludes hotels, hostels, artwork, galleries, campsites
+        _SCENIC_TOURISM = [
+            "viewpoint", "museum", "attraction", "aquarium", "zoo",
+            "theme_park", "lighthouse", "monument",
+        ]
+        # Natural subtypes worth visiting on a road trip
+        _SCENIC_NATURAL = [
+            "peak", "volcano", "beach", "cape", "cliff", "waterfall",
+            "hot_spring", "cave_entrance", "bay", "glacier", "wood",
+        ]
+        tags = {
+            "tourism": _SCENIC_TOURISM,
+            "historic": True,
+            "natural": _SCENIC_NATURAL,
+        }
         minx, miny, maxx, maxy = buffer_poly.bounds
 
         try:
@@ -27,10 +41,15 @@ class POIFinder:
         except Exception:
             return []
 
+        _GENERIC_VALUES = {"yes", "no", "true", "false", "tourism", "historic", "natural"}
+
         pois: list[POI] = []
         for _, row in gdf.iterrows():
             name = row.get("name")
-            if pd.isna(name) or not name:
+            if pd.isna(name):
+                continue
+            name = str(name).strip()
+            if len(name) < 3 or name.lower() in _GENERIC_VALUES:
                 continue
 
             geom = row.geometry

@@ -200,6 +200,18 @@ class RoutePipeline:
             for sp in top_pois:
                 self._wikipedia_fetcher.enrich(sp.poi)
 
+        # Drop POIs that have no description after enrichment — they produce
+        # unhelpful "no information available" narrative text
+        top_pois = [sp for sp in top_pois if sp.poi.description]
+        if not top_pois:
+            return {
+                "error": "no_pois_found",
+                "fallback_reason": (
+                    f"Scenic stops were found near the route but none had "
+                    f"available descriptions to recommend. Try a different query."
+                ),
+            }
+
         # If KnowledgeRAG is wired: run 3-stage GraphRAG pipeline
         if self._knowledge_rag is not None:
             preferences = state.get("preferences") or []

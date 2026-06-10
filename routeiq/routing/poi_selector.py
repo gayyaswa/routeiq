@@ -24,4 +24,13 @@ class POISelector:
                 filtered = scored_pois  # silent fallback: no category match → use all
         else:
             filtered = scored_pois
+
+        # Deduplicate by normalized name — keep lowest detour when same name appears multiple times
+        seen: dict[str, ScoredPOI] = {}
+        for sp in sorted(filtered, key=lambda s: s.detour_min):
+            key = sp.poi.name.lower().strip()
+            if key not in seen:
+                seen[key] = sp
+        filtered = list(seen.values())
+
         return sorted(filtered, key=lambda sp: sp.detour_min)[: self._top_n]

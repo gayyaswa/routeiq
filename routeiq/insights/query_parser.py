@@ -1,5 +1,6 @@
 from __future__ import annotations
 import json
+import re
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
@@ -15,6 +16,9 @@ class QueryParser:
 
     def parse(self, query: str) -> dict:
         raw = self._chain.invoke({"examples": self._examples, "query": query})
+        # Strip markdown code fences that some model versions wrap JSON in
+        raw = re.sub(r"^```(?:json)?\s*", "", raw.strip())
+        raw = re.sub(r"\s*```$", "", raw.strip())
         try:
             result = json.loads(raw)
         except json.JSONDecodeError as e:
