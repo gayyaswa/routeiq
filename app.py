@@ -2,25 +2,28 @@
 from __future__ import annotations
 
 import os
+import time
 import threading
 
 import streamlit as st
 from streamlit_folium import st_folium
 from dotenv import load_dotenv
-from langchain_anthropic import ChatAnthropic
 
-from routeiq.facade import RouteIQFacade
 from routeiq.graph import GraphLoader
-from routeiq.rag import POIIndexer, VectorBaseline
 from routeiq.ui import MapBuilder
 from routeiq.ui.card_renderer import render_stop_card
-from eval.evaluator import _BAY_AREA_SEED_POIS
 
 load_dotenv()
 
 import osmnx as ox
+
+_T0 = time.perf_counter()
+def _log(msg: str) -> None:
+    print(f"[{time.perf_counter()-_T0:6.2f}s] {msg}", flush=True)
 # OSMnx 2.x uses overpass_url (not overpass_endpoint which silently does nothing)
 ox.settings.overpass_url = "https://overpass.kumi.systems/api"
+ox.settings.overpass_rate_limit = False   # skip the /status pre-check that times out at 180s
+ox.settings.requests_timeout = 45         # fail fast per mirror instead of hanging
 
 st.set_page_config(
     page_title="RouteIQ — Scenic Route Intelligence",
@@ -117,30 +120,57 @@ def _preload_graphs(loader: GraphLoader) -> None:
 
 
 @st.cache_resource
-def _load_resources():
-    """Build and cache all RouteIQ components for the process lifetime."""
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    llm = ChatAnthropic(model="claude-sonnet-4-6", api_key=api_key or None)
-    shared_indexer = POIIndexer()  # GraphRAG pipeline — indexes on-route POIs per query
+def _load_lightweight():
+    """Lightweight init — runs at page load so the UI appears instantly."""
+    _log("_load_lightweight: start")
     graph_loader = GraphLoader()
-    facade = RouteIQFacade(llm, poi_indexer=shared_indexer, graph_loader=graph_loader)
-
-    # Vector baseline gets its own collection pre-seeded with Bay Area landmarks so it
-    # searches a broad regional corpus, never just the last route's POIs.
-    vector_indexer = POIIndexer(collection_name="routeiq_vector_baseline")
-    vector_indexer.index(_BAY_AREA_SEED_POIS)
-    vbaseline = VectorBaseline(vector_indexer)
-
+    _log("_load_lightweight: GraphLoader done")
     builder = MapBuilder()
-
+    _log("_load_lightweight: MapBuilder done")
     preload_thread = threading.Thread(
         target=_preload_graphs, args=(graph_loader,), daemon=True
     )
     preload_thread.start()
-    return facade, vbaseline, builder, preload_thread
+    _log("_load_lightweight: done")
+    return graph_loader, builder, preload_thread
 
 
-facade, vector_baseline, map_builder, _preload_thread = _load_resources()
+@st.cache_resource
+def _load_heavy():
+    """Heavy init (LLM + ChromaDB + pipeline) — deferred until first query."""
+    import chromadb
+    from langchain_anthropic import ChatAnthropic
+    from routeiq.facade import RouteIQFacade
+    from routeiq.rag import POIIndexer, VectorBaseline
+    from eval.evaluator import _BAY_AREA_SEED_POIS
+
+    _log("_load_heavy: start")
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    llm = ChatAnthropic(model="claude-sonnet-4-6", api_key=api_key or None)
+    _log("_load_heavy: LLM ready")
+
+    chroma_client = chromadb.PersistentClient(path="./cache/chroma")
+    _log("_load_heavy: ChromaDB client ready")
+    graph_loader, _, _ = _load_lightweight()
+
+    shared_indexer = POIIndexer(client=chroma_client)
+    _log("_load_heavy: shared_indexer ready")
+    facade = RouteIQFacade(llm, poi_indexer=shared_indexer, graph_loader=graph_loader, chroma_client=chroma_client)
+    _log("_load_heavy: facade ready")
+
+    vector_indexer = POIIndexer(client=chroma_client, collection_name="routeiq_vector_baseline")
+    if vector_indexer.collection.count() == 0:
+        _log("_load_heavy: seeding vector baseline…")
+        vector_indexer.index(_BAY_AREA_SEED_POIS)
+    vbaseline = VectorBaseline(vector_indexer)
+    _log("_load_heavy: done")
+
+    return facade, vbaseline
+
+
+_log("module top-level: before _load_lightweight()")
+_graph_loader, map_builder, _preload_thread = _load_lightweight()
+_log("module top-level: _load_lightweight() returned")
 
 
 # ── Header ────────────────────────────────────────────────────────────────────
@@ -165,6 +195,8 @@ query_input = st.text_input(
 run_btn = st.button("Find Scenic Stops ›", type="primary")
 
 if run_btn and query_input.strip():
+    facade, vector_baseline = _load_heavy()
+
     stepper_placeholder = st.empty()
     _step_state: dict = {"current": None, "done": set(), "subtask": ""}
 
@@ -181,27 +213,9 @@ if run_btn and query_input.strip():
     _step_state["current"] = None
     stepper_placeholder.empty()
 
-    # Generate a separate narrative from the vector baseline corpus so the
-    # expander reflects whichever mode the user is viewing.
-    if not state.get("error") and state.get("route_result"):
-        v_results = vector_baseline.query(query_input.strip(), n_results=5)
-        v_context = "\n\n".join(
-            f"{r['name']} | {r['category']} | {r['description']}"
-            for r in v_results
-            if r.get("description")
-        )
-        if v_context:
-            route = state["route_result"]
-            state["vector_narrative"] = facade.generate_narrative(
-                origin=state.get("origin", ""),
-                destination=state.get("destination", ""),
-                distance_km=route.length_km,
-                drive_time_min=route.drive_time_min,
-                poi_context=v_context,
-            )
-
     st.session_state["result"] = state
     st.session_state["last_query"] = query_input.strip()
+    st.session_state.pop("vector_narrative", None)  # clear stale narrative from previous query
 
 result: dict | None = st.session_state.get("result")
 
@@ -279,6 +293,7 @@ with card_col:
     else:
         # Vector baseline — semantic-only, no graph constraints
         last_query = st.session_state.get("last_query", "")
+        _, vector_baseline = _load_heavy()
         vector_results = vector_baseline.query(last_query, n_results=5) if last_query else []
 
         if vector_results:
@@ -302,7 +317,25 @@ narrative_label = (
     else "Route narrative — GraphRAG (generated by Claude)"
 )
 with st.expander(narrative_label, expanded=False):
-    if view_mode == "Vector Baseline" and result.get("vector_narrative"):
-        st.markdown(result["vector_narrative"])
+    if view_mode == "Vector Baseline":
+        if not st.session_state.get("vector_narrative"):
+            facade, vector_baseline = _load_heavy()
+            last_query = st.session_state.get("last_query", "")
+            v_results = vector_baseline.query(last_query, n_results=5) if last_query else []
+            v_context = "\n\n".join(
+                f"{r['name']} | {r['category']} | {r['description']}"
+                for r in v_results if r.get("description")
+            )
+            if v_context and not result.get("error") and result.get("route_result"):
+                route = result["route_result"]
+                with st.spinner("Generating vector baseline narrative…"):
+                    st.session_state["vector_narrative"] = facade.generate_narrative(
+                        origin=result.get("origin", ""),
+                        destination=result.get("destination", ""),
+                        distance_km=route.length_km,
+                        drive_time_min=route.drive_time_min,
+                        poi_context=v_context,
+                    )
+        st.markdown(st.session_state.get("vector_narrative") or narrative)
     else:
         st.markdown(narrative)

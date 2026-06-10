@@ -1,5 +1,6 @@
 """LangGraph state machine orchestrating parse → graph → rag → narrate nodes (Pipeline pattern)."""
 from __future__ import annotations
+import time
 from typing import Any, Optional
 
 import osmnx as ox
@@ -108,8 +109,10 @@ class RoutePipeline:
     # ── nodes ──────────────────────────────────────────────────────────────
 
     def _parse_node(self, state: PipelineState) -> dict:
+        t0 = time.perf_counter()
         self._progress("parse", "Sending query to Claude…")
         result = self._query_parser.parse(state["query"])
+        print(f"[timing] parse node: {time.perf_counter()-t0:.2f}s", flush=True)
         if "_parse_error" in result:
             return {
                 "error": "unparseable_query",
@@ -128,6 +131,8 @@ class RoutePipeline:
         }
 
     def _graph_node(self, state: PipelineState) -> dict:
+        t0 = time.perf_counter()
+
         self._progress("graph", f"Geocoding {state['origin']}…")
         try:
             origin_lat, origin_lon = ox.geocode(state["origin"])
@@ -140,6 +145,7 @@ class RoutePipeline:
                     f"Could not geocode '{state['origin']}' or '{state['destination']}': {e}"
                 ),
             }
+        print(f"[timing]   geocode: {time.perf_counter()-t0:.2f}s", flush=True)
 
         _PAD = 0.1
         north = max(origin_lat, dest_lat) + _PAD
@@ -148,9 +154,22 @@ class RoutePipeline:
         west  = min(origin_lon, dest_lon) - _PAD
 
         self._progress("graph", "Loading OSM road network…")
-        G = self._graph_loader.load(north=north, south=south, east=east, west=west)
+        t1 = time.perf_counter()
+        try:
+            G = self._graph_loader.load(north=north, south=south, east=east, west=west)
+        except Exception as e:
+            return {
+                "error": "network_error",
+                "fallback_reason": f"Could not load road network from any Overpass mirror: {e}",
+                "origin_lat": origin_lat,
+                "origin_lon": origin_lon,
+                "dest_lat": dest_lat,
+                "dest_lon": dest_lon,
+            }
+        print(f"[timing]   graph load: {time.perf_counter()-t1:.2f}s", flush=True)
 
         self._progress("graph", "Computing A* shortest path…")
+        t1 = time.perf_counter()
         try:
             rg = RouteGraph(G)
             route_result = rg.find_route(origin_lat, origin_lon, dest_lat, dest_lon)
@@ -163,6 +182,7 @@ class RoutePipeline:
                 "dest_lat": dest_lat,
                 "dest_lon": dest_lon,
             }
+        print(f"[timing]   A* pathfind: {time.perf_counter()-t1:.2f}s", flush=True)
 
         if route_result.drive_time_min > _ROUTE_TOO_LONG_MIN:
             return {
@@ -180,10 +200,16 @@ class RoutePipeline:
             }
 
         self._progress("graph", "Scanning route corridor for POIs…")
+        t1 = time.perf_counter()
         pois = self._poi_finder.find_pois(route_result.route_coords)
+        print(f"[timing]   POI scan: {time.perf_counter()-t1:.2f}s → {len(pois)} raw POIs", flush=True)
+
+        t1 = time.perf_counter()
         self._progress("graph", f"Scoring {len(pois)} POIs by detour cost…")
         scored = self._detour_scorer.score(pois, route_result.route_coords)
         top_pois = self._poi_selector.select(scored, preferences=state.get("preferences") or [])
+        print(f"[timing]   score+select: {time.perf_counter()-t1:.2f}s → {len(top_pois)} top POIs", flush=True)
+        print(f"[timing] graph node total: {time.perf_counter()-t0:.2f}s", flush=True)
         self._progress("graph", f"Selected {len(top_pois)} scenic stops")
 
         return {
@@ -197,6 +223,7 @@ class RoutePipeline:
         }
 
     def _rag_node(self, state: PipelineState) -> dict:
+        t0 = time.perf_counter()
         if not state.get("top_pois"):
             return {
                 "error": "no_pois_found",
@@ -208,44 +235,47 @@ class RoutePipeline:
 
         top_pois = state["top_pois"]
 
-        # Enrich each POI with Wikipedia text + thumbnail.
-        # POIs without descriptions are kept — Claude narrates from name + category
-        # rather than triggering a full fallback for missing enrichment data.
         if self._wikipedia_fetcher is not None:
             self._progress("rag", "Enriching POIs with Wikipedia…")
             for sp in top_pois:
+                t1 = time.perf_counter()
                 self._progress("rag", f"Fetching {sp.poi.name}…")
                 self._wikipedia_fetcher.enrich(sp.poi)
+                print(f"[timing]   wikipedia {sp.poi.name!r}: {time.perf_counter()-t1:.2f}s", flush=True)
 
         enriched = sum(1 for sp in top_pois if sp.poi.description)
         self._progress("rag", f"Enriched {enriched}/{len(top_pois)} stops with Wikipedia descriptions")
 
-        # If KnowledgeRAG is wired: run 3-stage GraphRAG pipeline
         if self._knowledge_rag is not None:
             preferences = state.get("preferences") or []
             route_coords = state["route_result"].route_coords if state.get("route_result") else []
 
             if self._poi_chunker is not None:
+                t1 = time.perf_counter()
                 self._progress("rag", "Chunking POI descriptions…")
                 pois = [sp.poi for sp in top_pois]
                 self._poi_chunker.chunk_and_index(pois)
+                print(f"[timing]   chunking+index: {time.perf_counter()-t1:.2f}s", flush=True)
 
+            t1 = time.perf_counter()
             self._progress("rag", "Running 3-stage GraphRAG retrieval…")
             poi_context = self._knowledge_rag.query(
                 preferences=preferences,
                 route_coords=route_coords,
             )
-            # Fall back to plain context if KnowledgeRAG returned nothing
+            print(f"[timing]   knowledge_rag.query: {time.perf_counter()-t1:.2f}s", flush=True)
             if not poi_context:
                 poi_context = self._build_poi_context(top_pois)
         else:
-            # Legacy path: plain context (used when KnowledgeRAG not wired)
+            t1 = time.perf_counter()
             self._progress("rag", "Indexing stops in ChromaDB…")
             if self._poi_indexer is not None:
                 pois = [sp.poi for sp in top_pois]
                 self._poi_indexer.index(pois)
             poi_context = self._build_poi_context(top_pois)
+            print(f"[timing]   chroma index+context: {time.perf_counter()-t1:.2f}s", flush=True)
 
+        print(f"[timing] rag node total: {time.perf_counter()-t0:.2f}s", flush=True)
         return {"poi_context": poi_context}
 
     @staticmethod
@@ -260,6 +290,7 @@ class RoutePipeline:
         return "\n\n".join(lines)
 
     def _narrate_node(self, state: PipelineState) -> dict:
+        t0 = time.perf_counter()
         self._progress("narrate", "Generating route narrative with Claude…")
         if state.get("error"):
             narrative = self._fallback_chain.generate(
@@ -276,6 +307,7 @@ class RoutePipeline:
                 top_pois=state.get("top_pois") or [],
                 poi_context=state.get("poi_context"),
             )
+        print(f"[timing] narrate node total: {time.perf_counter()-t0:.2f}s", flush=True)
         return {"narrative": narrative}
 
     # ── conditional edge routers ────────────────────────────────────────────

@@ -1,28 +1,38 @@
 from __future__ import annotations
+import json
+import os
+import time
+import dataclasses
 import pandas as pd
 import osmnx as ox
 from shapely.geometry import LineString
 from routeiq.graph.poi import POI
+from routeiq.graph.graph_loader import _OVERPASS_MIRRORS
 
 
 class POIFinder:
     """Spatially joins OSM features within a buffer around a route (Pipeline pattern)."""
 
-    def __init__(self, buffer_km: float = 5.0):
+    def __init__(self, buffer_km: float = 5.0, cache_dir: str = "./cache/pois"):
         self._buffer_km = buffer_km
+        self._cache_dir = cache_dir
+        os.makedirs(cache_dir, exist_ok=True)
 
     def find_pois(self, route_coords: list[tuple[float, float]]) -> list[POI]:
+        t0 = time.perf_counter()
         if not route_coords:
             return []
 
+        t1 = time.perf_counter()
         line = LineString([(lon, lat) for lat, lon in route_coords])
         buffer_deg = self._buffer_km / 111.0
         buffer_poly = line.buffer(buffer_deg)
+        print(f"[timing]     poi buffer build: {time.perf_counter()-t1:.2f}s ({len(route_coords)} coords)", flush=True)
 
-        # Scenic tourism subtypes only — excludes hotels, hostels, artwork, galleries, campsites
+        # Scenic tourism subtypes only — excludes hotels, hostels, artwork, campsites
         _SCENIC_TOURISM = [
             "viewpoint", "museum", "attraction", "aquarium", "zoo",
-            "theme_park", "lighthouse", "monument",
+            "theme_park", "lighthouse", "monument", "winery",
         ]
         # Explicit historic subtypes with reliable Wikipedia coverage.
         # "historic: True" returned thousands of minor features (roads, fences, districts)
@@ -42,14 +52,34 @@ class POIFinder:
             "natural": _SCENIC_NATURAL,
         }
         minx, miny, maxx, maxy = buffer_poly.bounds
+        cache_key = f"pois_n{maxy:.3f}_s{miny:.3f}_e{maxx:.3f}_w{minx:.3f}.json"
+        cache_path = os.path.join(self._cache_dir, cache_key)
 
-        try:
-            gdf = ox.features_from_bbox(bbox=(minx, miny, maxx, maxy), tags=tags)
-        except Exception:
+        if os.path.exists(cache_path):
+            t1 = time.perf_counter()
+            with open(cache_path) as f:
+                pois = [POI(**d) for d in json.load(f)]
+            print(f"[timing]     poi cache HIT: {time.perf_counter()-t1:.2f}s → {len(pois)} POIs", flush=True)
+            return pois
+
+        print(f"[timing]     poi cache MISS — querying Overpass", flush=True)
+        gdf = None
+        for mirror in _OVERPASS_MIRRORS:
+            t1 = time.perf_counter()
+            try:
+                ox.settings.overpass_url = mirror
+                gdf = ox.features_from_bbox(bbox=(minx, miny, maxx, maxy), tags=tags)
+                print(f"[timing]     overpass {mirror}: {time.perf_counter()-t1:.2f}s → {len(gdf)} rows", flush=True)
+                break
+            except Exception as e:
+                print(f"[timing]     overpass {mirror}: FAILED after {time.perf_counter()-t1:.2f}s ({e})", flush=True)
+                continue
+        if gdf is None:
             return []
 
         _GENERIC_VALUES = {"yes", "no", "true", "false", "tourism", "historic", "natural"}
 
+        t1 = time.perf_counter()
         pois: list[POI] = []
         for _, row in gdf.iterrows():
             name = row.get("name")
@@ -88,5 +118,9 @@ class POIFinder:
                     wikipedia_tag=wikipedia_tag,
                 )
             )
+        print(f"[timing]     spatial filter: {time.perf_counter()-t1:.2f}s → {len(pois)} POIs kept", flush=True)
 
+        with open(cache_path, "w") as f:
+            json.dump([dataclasses.asdict(p) for p in pois], f)
+        print(f"[timing]   poi find_pois total: {time.perf_counter()-t0:.2f}s", flush=True)
         return pois

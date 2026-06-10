@@ -37,8 +37,8 @@ def _make_gdf():
 
 
 @pytest.fixture
-def finder():
-    return POIFinder(buffer_km=5.0)
+def finder(tmp_path):
+    return POIFinder(buffer_km=5.0, cache_dir=str(tmp_path))
 
 
 class TestPOIFinderBasic:
