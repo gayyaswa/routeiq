@@ -7,10 +7,10 @@ from __future__ import annotations
 
 EVAL_QUERIES: list[dict] = [
     {
-        "query": "Drive from San Francisco to Monterey, show coastal history and natural landmarks",
+        "query": "Drive from San Francisco to Muir Woods, show redwoods and coastal views",
         "type": "route",
         "expected_winner": "graphrag",
-        "why": "GraphRAG constrains to SF-Monterey corridor; vector retrieves any coastal POI",
+        "why": "GraphRAG constrains to SF-Marin corridor; vector retrieves any redwood/coastal POI",
     },
     {
         "query": "Road trip from San Francisco to Napa Valley, show wineries and historic towns",
@@ -37,10 +37,10 @@ EVAL_QUERIES: list[dict] = [
         "why": "GraphRAG follows HWY 1 south; vector returns any beach/cliff POI",
     },
     {
-        "query": "Drive from Oakland to Muir Woods, show old-growth redwoods and nature",
+        "query": "Drive from San Francisco to Sausalito via the Golden Gate Bridge, show historic sites and bay views",
         "type": "route",
         "expected_winner": "graphrag",
-        "why": "GraphRAG follows the specific Oakland→Marin route; vector returns all redwood parks",
+        "why": "GraphRAG constrains to the GG Bridge / Marin Headlands corridor; vector returns any historic Bay Area site",
     },
     {
         "query": "beautiful California coastal drives",

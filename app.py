@@ -186,17 +186,10 @@ def _load_heavy():
     _log("_load_heavy: facade ready")
 
     vector_indexer = POIIndexer(client=chroma_client, collection_name="routeiq_vector_baseline")
-    _needs_enrich = (
-        vector_indexer.collection.count() == 0
-        or not any(
-            m.get("image_url")
-            for m in (
-                vector_indexer.collection.get(limit=1, include=["metadatas"])["metadatas"] or []
-            )
-        )
-    )
+    # Re-seed if collection is smaller than half the expected seed size (handles upgrade from 15→95 POIs)
+    _needs_enrich = vector_indexer.collection.count() < len(_BAY_AREA_SEED_POIS) // 2
     if _needs_enrich:
-        _log("_load_heavy: enriching seed POIs with Wikipedia images…")
+        _log(f"_load_heavy: enriching {len(_BAY_AREA_SEED_POIS)} notable Bay Area POIs with Wikipedia…")
         from concurrent.futures import ThreadPoolExecutor
         from routeiq.rag import WikipediaFetcher as _WF
         def _enrich_seed(poi):
@@ -204,7 +197,8 @@ def _load_heavy():
         with ThreadPoolExecutor(max_workers=5) as pool:
             list(pool.map(_enrich_seed, _BAY_AREA_SEED_POIS))
         _log("_load_heavy: seeding vector baseline…")
-        vector_indexer.index(_BAY_AREA_SEED_POIS)
+        indexed = vector_indexer.index(_BAY_AREA_SEED_POIS)
+        _log(f"_load_heavy: seeded {indexed} enriched POIs into vector baseline")
     vbaseline = VectorBaseline(vector_indexer)
     _log("_load_heavy: done")
 

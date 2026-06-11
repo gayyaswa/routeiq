@@ -38,7 +38,10 @@ def _format_table(rows: list[dict]) -> str:
         "|---|-------|------|--------------|-------------|-------------------|-----------------|--------|",
     ]
     for i, row in enumerate(rows, 1):
-        g_pois = ", ".join(row["graphrag_pois"]) or "*(pipeline error)*"
+        if row["type"] == "semantic":
+            g_pois = "*(semantic — no route to parse)*"
+        else:
+            g_pois = ", ".join(row["graphrag_pois"]) or "*(pipeline error)*"
         v_pois = ", ".join(row["vector_pois"]) or "*(empty)*"
         g_only = ", ".join(row["graphrag_only"]) or "—"
         v_only = ", ".join(row["vector_only"]) or "—"

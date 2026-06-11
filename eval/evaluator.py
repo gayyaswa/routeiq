@@ -1,44 +1,41 @@
 """GraphRAG vs. vector-only baseline evaluator (Strategy pattern)."""
 from __future__ import annotations
 
+import gzip
+import json
+from pathlib import Path
+
 from routeiq.facade import RouteIQFacade
 from routeiq.rag import POIIndexer, VectorBaseline
 from routeiq.graph.poi import POI
 
+_MASTER_FILE = Path(__file__).parent.parent / "cache" / "pois" / "bay_area_all.json.gz"
 
-# Bay Area landmark seed data — pre-indexed so vector baseline always has data
-_BAY_AREA_SEED_POIS: list[POI] = [
-    POI("Cannery Row", "tourism", 36.6177, -121.8983, "ba_cannery",
-        description="Historic cannery district in Monterey, California, immortalized by John Steinbeck's 1945 novel of the same name. The area now features aquariums, restaurants, and shops along the scenic waterfront."),
-    POI("Point Lobos State Natural Reserve", "natural", 36.5152, -121.9443, "ba_lobos",
-        description="A rugged headland just south of Carmel offering dramatic rocky shores, tide pools, sea otters, harbor seals, and spectacular ocean views. Considered the crown jewel of California's state park system."),
-    POI("Carmel Mission", "historic", 36.5403, -121.9194, "ba_carmel_mission",
-        description="Spanish colonial mission founded in 1770 by Father Junípero Serra. One of the best-preserved of California's 21 missions, with a stone church, museum, and Serra's burial site."),
-    POI("17-Mile Drive", "tourism", 36.5794, -121.9681, "ba_17mile",
-        description="Scenic private toll road along the Monterey Peninsula passing the Lone Cypress, Pebble Beach Golf Links, and sweeping Pacific Ocean views through Del Monte Forest."),
-    POI("Napa Valley Wine Train", "tourism", 38.2995, -122.2869, "ba_winetrain",
-        description="A vintage rail journey through the heart of Napa Valley wine country, offering gourmet dining while rolling past world-famous vineyards and the historic town of St. Helena."),
-    POI("Castello di Amorosa", "tourism", 38.5591, -122.5541, "ba_castello",
-        description="A fully authentic 13th-century Tuscan castle and winery in Calistoga, hand-built from European materials with a dungeon, torture chamber, and stunning wine caves."),
-    POI("Henry Cowell Redwoods State Park", "natural", 37.0509, -122.0592, "ba_cowell",
-        description="Old-growth coast redwood forest in the Santa Cruz Mountains, featuring trees over 1,500 years old and 15 miles of hiking trails through Cathedral Redwoods grove."),
-    POI("Roaring Camp Railroad", "tourism", 37.0442, -122.0698, "ba_roaringcamp",
-        description="Historic narrow-gauge steam train operating since 1875 through towering old-growth redwoods in Felton, offering both mountain and beach routes through the Santa Cruz Mountains."),
-    POI("Point Reyes Lighthouse", "historic", 37.9963, -123.0235, "ba_ptreyes",
-        description="A dramatic Victorian-era lighthouse perched 300 feet above the Pacific on Point Reyes National Seashore, one of the foggiest and windiest locations on the U.S. west coast."),
-    POI("Muir Woods National Monument", "natural", 37.8968, -122.5715, "ba_muirwoods",
-        description="A stand of old-growth coastal redwoods just 12 miles north of San Francisco, named after conservationist John Muir. Features trees over 1,000 years old and 6 miles of trails."),
-    POI("Pigeon Point Lighthouse", "historic", 37.1808, -122.3946, "ba_pigeon",
-        description="One of the tallest lighthouses on the US Pacific Coast, built in 1871 on the rugged San Mateo coast near Pescadero, now a hostel and popular whale-watching spot."),
-    POI("Mavericks Surf Break", "natural", 37.4913, -122.4993, "ba_mavericks",
-        description="World-famous big-wave surfing site near Half Moon Bay where waves can reach 60 feet. Site of the legendary Mavericks Invitational competition, visible from the coastal bluffs."),
-    POI("Sonoma Plaza", "historic", 38.2921, -122.4580, "ba_sonoma",
-        description="The largest historic plaza in California, surrounded by Mission San Francisco Solano and adobe buildings from the Mexican era, where the Bear Flag Republic was proclaimed in 1846."),
-    POI("Jack London State Historic Park", "historic", 38.3558, -122.5278, "ba_jacklondon",
-        description="The Beauty Ranch estate of writer Jack London in Glen Ellen, featuring ruins of his Wolf House, cottage museum, and the Valley of the Moon landscape that inspired his writings."),
-    POI("Big Basin Redwoods State Park", "natural", 37.1743, -122.2250, "ba_bigbasin",
-        description="California's oldest state park, established 1902, protecting ancient coast redwoods in the Santa Cruz Mountains including trees over 2,000 years old and 80 miles of trails."),
-]
+
+def _load_notable_bay_area_pois() -> list[POI]:
+    """Load OSM-verified notable Bay Area POIs (wikipedia_tag set) from master cache."""
+    if not _MASTER_FILE.exists():
+        return []
+    with gzip.open(_MASTER_FILE) as f:
+        raw = json.load(f)
+    return [
+        POI(
+            name=p["name"],
+            category=p.get("category", "tourism"),
+            lat=p["lat"],
+            lon=p["lon"],
+            osm_id=p["osm_id"],
+            wikipedia_tag=p.get("wikipedia_tag"),
+            subtype=p.get("subtype"),
+        )
+        for p in raw
+        if p.get("wikipedia_tag")
+    ]
+
+
+# 95 OSM-verified notable Bay Area landmarks — loaded from committed master cache.
+# Descriptions are fetched via Wikipedia at seed time (Evaluator._ensure_seeded).
+_BAY_AREA_SEED_POIS: list[POI] = _load_notable_bay_area_pois()
 
 
 class Evaluator:
@@ -51,10 +48,18 @@ class Evaluator:
         self._seed_done = False
 
     def _ensure_seeded(self) -> None:
-        """Index Bay Area seed POIs so vector baseline always has data."""
+        """Enrich and index notable Bay Area POIs so vector baseline has rich coverage."""
         if self._seed_done:
             return
-        self._indexer.index(_BAY_AREA_SEED_POIS)
+        from concurrent.futures import ThreadPoolExecutor
+        from routeiq.rag import WikipediaFetcher
+        print(f"    Enriching {len(_BAY_AREA_SEED_POIS)} notable Bay Area POIs with Wikipedia descriptions…")
+        def _enrich(poi: POI) -> None:
+            WikipediaFetcher().enrich(poi)
+        with ThreadPoolExecutor(max_workers=5) as pool:
+            list(pool.map(_enrich, _BAY_AREA_SEED_POIS))
+        indexed = self._indexer.index(_BAY_AREA_SEED_POIS)
+        print(f"    Seeded vector baseline with {indexed} enriched POIs")
         self._seed_done = True
 
     def run_graphrag(self, query: str) -> dict:

@@ -1,4 +1,10 @@
-"""Seed data for the RouteIQ knowledge graph — POIs, Cities, Regions, Categories."""
+"""Seed data for the RouteIQ knowledge graph — Bay Area POIs, Cities, Regions, Categories."""
+from __future__ import annotations
+
+import gzip
+import json
+import math
+from pathlib import Path
 
 CATEGORIES = [
     {"name": "historic"},
@@ -10,189 +16,115 @@ CATEGORIES = [
 ]
 
 REGIONS = [
-    {"name": "Hill Country",           "type": "scenic_region"},
-    {"name": "Highland Lakes",         "type": "scenic_region"},
-    {"name": "San Antonio Missions",   "type": "historic_district"},
-    {"name": "Blanco Valley",          "type": "scenic_region"},
-    {"name": "Texas Wine Country",     "type": "scenic_region"},
+    {"name": "San Francisco",     "type": "city_region"},
+    {"name": "North Bay / Marin", "type": "scenic_region"},
+    {"name": "East Bay",          "type": "urban_region"},
+    {"name": "Peninsula",         "type": "scenic_region"},
+    {"name": "South Bay",         "type": "urban_region"},
+    {"name": "Wine Country",      "type": "scenic_region"},
+    {"name": "Bay Area",          "type": "metro_region"},
 ]
 
 CITIES = [
-    {"name": "Austin",         "lat": 30.2672, "lon": -97.7431},
-    {"name": "San Antonio",    "lat": 29.4241, "lon": -98.4936},
-    {"name": "New Braunfels",  "lat": 29.7030, "lon": -98.1245},
-    {"name": "San Marcos",     "lat": 29.8833, "lon": -97.9414},
-    {"name": "Fredericksburg", "lat": 30.2752, "lon": -98.8720},
-    {"name": "Kerrville",      "lat": 30.0474, "lon": -99.1403},
-    {"name": "Marble Falls",   "lat": 30.5782, "lon": -98.2737},
-    {"name": "Round Rock",     "lat": 30.5083, "lon": -97.6789},
+    {"name": "San Francisco", "lat": 37.7749, "lon": -122.4194},
+    {"name": "Oakland",       "lat": 37.8044, "lon": -122.2712},
+    {"name": "Berkeley",      "lat": 37.8716, "lon": -122.2727},
+    {"name": "San Jose",      "lat": 37.3382, "lon": -121.8863},
+    {"name": "Santa Cruz",    "lat": 36.9741, "lon": -122.0308},
+    {"name": "Sausalito",     "lat": 37.8590, "lon": -122.4852},
+    {"name": "Napa",          "lat": 38.2975, "lon": -122.2869},
+    {"name": "Half Moon Bay", "lat": 37.4636, "lon": -122.4286},
+    {"name": "Mill Valley",   "lat": 37.9060, "lon": -122.5450},
+    {"name": "Tiburon",       "lat": 37.8910, "lon": -122.4569},
 ]
 
-POIS = [
-    {
-        "osm_id": "kg_alamo",
-        "name": "The Alamo",
-        "category": "mission",
-        "lat": 29.4260, "lon": -98.4861,
-        "city": "San Antonio",
-        "region": "San Antonio Missions",
-        "wikipedia_tag": "en:The Alamo",
-    },
-    {
-        "osm_id": "kg_concepcion",
-        "name": "Mission Concepción",
-        "category": "mission",
-        "lat": 29.4063, "lon": -98.4874,
-        "city": "San Antonio",
-        "region": "San Antonio Missions",
-        "wikipedia_tag": "en:Mission Concepción",
-    },
-    {
-        "osm_id": "kg_sanjuan",
-        "name": "Mission San Juan",
-        "category": "mission",
-        "lat": 29.3630, "lon": -98.4815,
-        "city": "San Antonio",
-        "region": "San Antonio Missions",
-        "wikipedia_tag": "en:Mission San Juan Capistrano (Texas)",
-    },
-    {
-        "osm_id": "kg_natural_bridge",
-        "name": "Natural Bridge Caverns",
-        "category": "tourism",
-        "lat": 29.6927, "lon": -98.3419,
-        "city": "New Braunfels",
-        "region": "Hill Country",
-        "wikipedia_tag": "en:Natural Bridge Caverns",
-    },
-    {
-        "osm_id": "kg_enchanted_rock",
-        "name": "Enchanted Rock",
-        "category": "natural",
-        "lat": 30.5063, "lon": -98.8198,
-        "city": "Fredericksburg",
-        "region": "Hill Country",
-        "wikipedia_tag": "en:Enchanted Rock",
-    },
-    {
-        "osm_id": "kg_luckenbach",
-        "name": "Luckenbach Texas",
-        "category": "tourism",
-        "lat": 30.1849, "lon": -98.7384,
-        "city": "Fredericksburg",
-        "region": "Texas Wine Country",
-        "wikipedia_tag": "en:Luckenbach, Texas",
-    },
-    {
-        "osm_id": "kg_gruene",
-        "name": "Gruene Historic District",
-        "category": "historic",
-        "lat": 29.7380, "lon": -98.1096,
-        "city": "New Braunfels",
-        "region": "Blanco Valley",
-        "wikipedia_tag": "en:Gruene, Texas",
-    },
-    {
-        "osm_id": "kg_pedernales",
-        "name": "Pedernales Falls State Park",
-        "category": "state_park",
-        "lat": 30.3077, "lon": -98.2566,
-        "city": "Marble Falls",
-        "region": "Hill Country",
-        "wikipedia_tag": "en:Pedernales Falls State Park",
-    },
-    {
-        "osm_id": "kg_old_tunnel",
-        "name": "Old Tunnel State Park",
-        "category": "natural",
-        "lat": 30.1716, "lon": -98.7505,
-        "city": "Fredericksburg",
-        "region": "Texas Wine Country",
-        "wikipedia_tag": "en:Old Tunnel State Park",
-    },
-    {
-        "osm_id": "kg_guadalupe",
-        "name": "Guadalupe River State Park",
-        "category": "state_park",
-        "lat": 29.8472, "lon": -98.4896,
-        "city": "New Braunfels",
-        "region": "Hill Country",
-        "wikipedia_tag": "en:Guadalupe River State Park",
-    },
-    {
-        "osm_id": "kg_becker",
-        "name": "Becker Vineyards",
-        "category": "winery",
-        "lat": 30.2208, "lon": -98.8661,
-        "city": "Fredericksburg",
-        "region": "Texas Wine Country",
-        "wikipedia_tag": "en:Becker Vineyards",
-    },
-    {
-        "osm_id": "kg_hamilton",
-        "name": "Hamilton Pool Preserve",
-        "category": "natural",
-        "lat": 30.3427, "lon": -98.1269,
-        "city": "Austin",
-        "region": "Hill Country",
-        "wikipedia_tag": "en:Hamilton Pool Preserve",
-    },
-    {
-        "osm_id": "kg_wimberley",
-        "name": "Wimberley",
-        "category": "tourism",
-        "lat": 29.9977, "lon": -98.0986,
-        "city": "San Marcos",
-        "region": "Blanco Valley",
-        "wikipedia_tag": "en:Wimberley, Texas",
-    },
-    {
-        "osm_id": "kg_national_museum",
-        "name": "San Antonio Missions National Historical Park",
-        "category": "historic",
-        "lat": 29.3596, "lon": -98.4760,
-        "city": "San Antonio",
-        "region": "San Antonio Missions",
-        "wikipedia_tag": "en:San Antonio Missions National Historical Park",
-    },
-    {
-        "osm_id": "kg_canyon_lake",
-        "name": "Canyon Lake",
-        "category": "natural",
-        "lat": 29.8716, "lon": -98.2617,
-        "city": "New Braunfels",
-        "region": "Highland Lakes",
-        "wikipedia_tag": "en:Canyon Lake (Texas)",
-    },
+_CITY_REGIONS: dict[str, str] = {
+    "San Francisco": "San Francisco",
+    "Sausalito":     "North Bay / Marin",
+    "Mill Valley":   "North Bay / Marin",
+    "Tiburon":       "North Bay / Marin",
+    "Oakland":       "East Bay",
+    "Berkeley":      "East Bay",
+    "Half Moon Bay": "Peninsula",
+    "San Jose":      "South Bay",
+    "Santa Cruz":    "South Bay",
+    "Napa":          "Wine Country",
+}
+
+_VALID_CATEGORIES = {c["name"] for c in CATEGORIES}
+
+# Anchor POIs — always present; used as fallback when master cache is missing.
+# osm_ids match values in cache/pois/bay_area_all.json.gz for dedup consistency.
+_ANCHOR_POIS: list[dict] = [
+    {"osm_id": "('way', 370672707)",    "name": "Golden Gate Bridge",  "category": "tourism",  "lat": 37.8203, "lon": -122.4786},
+    {"osm_id": "('relation', 5504536)", "name": "Fort Point",          "category": "historic", "lat": 37.8106, "lon": -122.4771},
+    {"osm_id": "('way', 28824850)",     "name": "Coit Tower",          "category": "historic", "lat": 37.8024, "lon": -122.4058},
+    {"osm_id": "('way', 288371295)",    "name": "Palace of Fine Arts",  "category": "tourism",  "lat": 37.8029, "lon": -122.4484},
 ]
 
-# Typed relationships: (source_id, rel_type, target_id)
-# source/target ids are osm_id for POIs, name for City/Region/Category
+
+def _haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    R = 6371.0
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dphi, dlam = math.radians(lat2 - lat1), math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def _nearest_city(lat: float, lon: float) -> str:
+    best, best_d = "San Francisco", float("inf")
+    for city in CITIES:
+        d = _haversine(lat, lon, city["lat"], city["lon"])
+        if d < best_d:
+            best_d = d
+            best = city["name"]
+    return best
+
+
+def _load_bay_area_pois() -> list[dict]:
+    """Load OSM-verified notable Bay Area POIs from master cache; fallback to anchors."""
+    master = Path(__file__).parent.parent.parent / "cache" / "pois" / "bay_area_all.json.gz"
+    if not master.exists():
+        anchors = [dict(p) for p in _ANCHOR_POIS]
+        for p in anchors:
+            p["city"] = _nearest_city(p["lat"], p["lon"])
+            p["region"] = _CITY_REGIONS.get(p["city"], "Bay Area")
+        return anchors
+
+    with gzip.open(master) as f:
+        raw = json.load(f)
+
+    seen: set[str] = set()
+    pois: list[dict] = []
+    for p in raw:
+        if not p.get("wikipedia_tag"):
+            continue
+        osm_id = p["osm_id"]
+        if osm_id in seen:
+            continue
+        seen.add(osm_id)
+        city = _nearest_city(p["lat"], p["lon"])
+        pois.append({
+            "osm_id": osm_id,
+            "name": p["name"],
+            "category": p.get("category", "tourism"),
+            "lat": p["lat"],
+            "lon": p["lon"],
+            "city": city,
+            "region": _CITY_REGIONS.get(city, "Bay Area"),
+            "wikipedia_tag": p.get("wikipedia_tag"),
+        })
+    return pois
+
+
+POIS = _load_bay_area_pois()
+
 RELATIONSHIPS = (
-    # POI -[LOCATED_IN]→ City
-    [("kg_alamo",           "LOCATED_IN", "San Antonio")]
-  + [("kg_concepcion",      "LOCATED_IN", "San Antonio")]
-  + [("kg_sanjuan",         "LOCATED_IN", "San Antonio")]
-  + [("kg_national_museum", "LOCATED_IN", "San Antonio")]
-  + [("kg_natural_bridge",  "LOCATED_IN", "New Braunfels")]
-  + [("kg_gruene",          "LOCATED_IN", "New Braunfels")]
-  + [("kg_guadalupe",       "LOCATED_IN", "New Braunfels")]
-  + [("kg_canyon_lake",     "LOCATED_IN", "New Braunfels")]
-  + [("kg_enchanted_rock",  "LOCATED_IN", "Fredericksburg")]
-  + [("kg_luckenbach",      "LOCATED_IN", "Fredericksburg")]
-  + [("kg_old_tunnel",      "LOCATED_IN", "Fredericksburg")]
-  + [("kg_becker",          "LOCATED_IN", "Fredericksburg")]
-  + [("kg_pedernales",      "LOCATED_IN", "Marble Falls")]
-  + [("kg_hamilton",        "LOCATED_IN", "Austin")]
-  + [("kg_wimberley",       "LOCATED_IN", "San Marcos")]
-  # POI -[HAS_CATEGORY]→ Category
-  + [(p["osm_id"], "HAS_CATEGORY", p["category"]) for p in POIS]
-  # City -[IN_REGION]→ Region
-  + [("San Antonio",    "IN_REGION", "San Antonio Missions")]
-  + [("New Braunfels",  "IN_REGION", "Hill Country")]
-  + [("Fredericksburg", "IN_REGION", "Hill Country")]
-  + [("Fredericksburg", "IN_REGION", "Texas Wine Country")]
-  + [("Marble Falls",   "IN_REGION", "Highland Lakes")]
-  + [("San Marcos",     "IN_REGION", "Blanco Valley")]
-  + [("Austin",         "IN_REGION", "Hill Country")]
+    [(p["osm_id"], "LOCATED_IN", p["city"]) for p in POIS]
+    + [
+        (p["osm_id"], "HAS_CATEGORY", p["category"] if p["category"] in _VALID_CATEGORIES else "tourism")
+        for p in POIS
+    ]
+    + [(city["name"], "IN_REGION", _CITY_REGIONS.get(city["name"], "Bay Area")) for city in CITIES]
+    + [(city["name"], "IN_REGION", "Bay Area") for city in CITIES]
 )

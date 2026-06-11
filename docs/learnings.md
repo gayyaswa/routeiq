@@ -118,10 +118,11 @@ manually-seeded knowledge graph adds precision that no embedding model can repli
 
 ### KnowledgeGraph seed data vs live OSM data — the coverage gap
 
-**Design tension:** The KnowledgeGraph is pre-seeded with 15 Bay Area landmark POIs and
-8 cities. Live queries pull OSM features that may not exist in the seed data. When a
-live OSM POI has no matching node in the knowledge graph, the graph augmentation step
-returns no relational context.
+**Design tension:** The KnowledgeGraph is pre-seeded with 95 OSM-verified notable Bay
+Area POIs across 10 cities and 7 regions, auto-loaded from `bay_area_all.json.gz`.
+Live queries pull OSM features that may not exist in the seed data. When a live OSM
+POI has no matching node in the knowledge graph, the graph augmentation step returns
+no relational context.
 
 **How it's handled:** `KnowledgeRAG` falls back to plain vector context for POIs not in
 the knowledge graph. Famous Bay Area landmarks (Point Lobos, Muir Woods) get the full

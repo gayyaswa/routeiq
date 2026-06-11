@@ -29,7 +29,7 @@ streamlit run app.py
 
 ## What it does
 
-RouteIQ answers natural-language scenic route questions like *"Drive from San Francisco to Monterey, show coastal landmarks and historic sites."* It loads the real road network from OpenStreetMap, finds the A\* shortest path, spatially joins points of interest within a 5 km corridor buffer, enriches them with Wikipedia descriptions, and runs a 3-stage Graph RAG pipeline (vector search → knowledge graph augmentation → context assembly) before asking Claude to generate a streaming narrative. The result is an interactive Folium map with animated route, colour-coded stop markers, stop cards with Wikipedia images, and side-by-side GraphRAG vs. vector-only comparison.
+RouteIQ answers natural-language scenic route questions like *"Drive from San Francisco to Muir Woods, show redwoods and coastal views."* It loads the real road network from OpenStreetMap, finds the A\* shortest path, spatially joins points of interest within a 5 km corridor buffer, enriches them with Wikipedia descriptions, and runs a 3-stage Graph RAG pipeline (vector search → knowledge graph augmentation → context assembly) before asking Claude to generate a streaming narrative. The result is an interactive Folium map with animated route, colour-coded stop markers, stop cards with Wikipedia images, and side-by-side GraphRAG vs. vector-only comparison.
 
 ---
 
@@ -164,7 +164,7 @@ graph LR
 python3 -m pytest tests/ -v
 ```
 
-**124 tests, 16 test files** — one per module. Coverage includes:
+**127 tests, 16 test files** — one per module. Coverage includes:
 
 | Area | Tests |
 |---|---|
@@ -182,6 +182,37 @@ python3 -m pytest tests/ -v
 | LangGraph pipeline nodes + edges | `test_pipeline.py` |
 | Vector baseline | `test_vector_baseline.py` |
 | Fallback chain | `test_fallback_chain.py` |
+
+---
+
+## Evaluation
+
+Runs a 10-query comparison of GraphRAG vs. vector-only baseline and saves results to `eval/results.md`.
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+python3 eval/run_eval.py
+```
+
+**Requirements:** `ANTHROPIC_API_KEY` · ~15 min runtime · ~$0.05–0.10 API cost (6 LLM calls for route queries)
+
+**What it does:**
+- Runs 6 route queries through the full GraphRAG pipeline
+- Runs all 10 queries through the vector baseline (95 notable Bay Area POIs, Wikipedia-enriched)
+- Compares POI overlap and uniqueness, determines winner per query
+- Prints a results table and saves `eval/results.md`
+
+**Vector baseline seed:** `eval/evaluator.py` loads 95 OSM-verified notable Bay Area landmarks
+from `cache/pois/bay_area_all.json.gz` (wikipedia-tagged POIs only) and Wikipedia-enriches
+them at startup. To regenerate the master POI file:
+
+```bash
+python3 scripts/seed_poi_cache.py           # bootstrap from existing per-route caches
+python3 scripts/seed_poi_cache.py --tiles   # full 4-tile Overpass fetch (~3-5 min)
+```
+
+**Latest results:** See [eval/results.md](eval/results.md) — GraphRAG wins 6/6 route queries,
+vector wins 4/4 semantic queries, 10/10 prediction accuracy.
 
 ---
 
