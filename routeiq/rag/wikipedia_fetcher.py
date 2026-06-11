@@ -36,6 +36,29 @@ class WikipediaFetcher:
             thumb = data.get("thumbnail") or {}
             if thumb.get("source"):
                 poi.image_url = thumb["source"]
+            # Fallback: REST summary only returns free-license thumbnails.
+            # pageimages with pilicense=any also returns non-free images used
+            # under fair use — common for historic sites and tourism landmarks.
+            if not poi.image_url:
+                img_resp = self._session.get(
+                    _SEARCH_URL,
+                    params={
+                        "action": "query",
+                        "titles": title,
+                        "prop": "pageimages",
+                        "format": "json",
+                        "pithumbsize": 300,
+                        "pilicense": "any",
+                    },
+                    timeout=_REQUEST_TIMEOUT,
+                )
+                if img_resp.status_code == 200:
+                    pages = img_resp.json().get("query", {}).get("pages", {})
+                    for page in pages.values():
+                        src = page.get("thumbnail", {}).get("source")
+                        if src:
+                            poi.image_url = src
+                            break
         except Exception:
             pass  # graceful degradation — narrative falls back to name + category
 

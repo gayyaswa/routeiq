@@ -20,7 +20,7 @@ _log("import: dotenv")
 from dotenv import load_dotenv
 load_dotenv()
 _log("import: routeiq.ui.card_renderer")
-from routeiq.ui.card_renderer import render_stop_card
+from routeiq.ui.card_renderer import render_stop_card, render_vector_card
 _log("imports: light done")
 
 st.set_page_config(
@@ -334,15 +334,12 @@ with card_col:
         vector_results = vector_baseline.query(last_query, n_results=5) if last_query else []
 
         if vector_results:
-            st.caption("Vector-only retrieval (semantic similarity, no route constraints):")
-            for i, r in enumerate(vector_results, 1):
-                st.markdown(
-                    f"**{i}. {r['name']}** &nbsp; `{r['category']}` &nbsp; score: `{r['similarity_score']:.3f}`",
-                    unsafe_allow_html=True,
-                )
-                if r.get("description"):
-                    st.caption(r["description"][:130])
-                st.divider()
+            cards_html = (
+                '<div style="height:500px;overflow-y:auto;padding-right:6px;">'
+                + "".join(render_vector_card(r, i) for i, r in enumerate(vector_results, 1))
+                + "</div>"
+            )
+            st.components.v1.html(cards_html, height=510, scrolling=False)
         else:
             st.info("Run a route query first to populate the vector baseline.")
 
