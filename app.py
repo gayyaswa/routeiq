@@ -216,13 +216,23 @@ if run_btn and query_input.strip():
     narrative_stream_placeholder = st.empty()
     _step_state: dict = {"current": None, "done": set(), "subtask": ""}
     _narrative_buffer = [""]
+    _last_narrate_push = [0.0]
 
     def _on_progress(step: str, subtask: str) -> None:
         if step == "narrate_stream":
             _narrative_buffer[0] += subtask
+            now = time.perf_counter()
+            if now - _last_narrate_push[0] < 0.12:  # throttle: ~8 UI updates/sec
+                return
+            _last_narrate_push[0] = now
+            tail = _narrative_buffer[0][-450:]
+            display = ("…" + tail) if len(_narrative_buffer[0]) > 450 else tail
             narrative_stream_placeholder.markdown(
-                f'<div style="font-size:14px;line-height:1.7;color:#1f2937">'
-                f'{_narrative_buffer[0]}</div>',
+                f'<div style="font-size:13px;line-height:1.7;'
+                f'padding:10px 14px;border-radius:8px;border:1px solid rgba(128,128,128,0.2);'
+                f'background:rgba(128,128,128,0.06);">'
+                f'<span style="font-size:11px;opacity:0.55;display:block;margin-bottom:6px;">Generating narrative…</span>'
+                f'{display}</div>',
                 unsafe_allow_html=True,
             )
             return
