@@ -110,6 +110,22 @@ _DEMO_BBOXES = [
 ]
 
 
+# Geographic coverage of the vector baseline seed collection (Bay Area POIs only).
+# Routes whose midpoint falls outside this bbox get a "not available" message
+# instead of semantically-similar-but-geographically-wrong Bay Area results.
+_VECTOR_BASELINE_BBOX = dict(north=38.85, south=36.70, east=-121.50, west=-123.10)
+
+
+def _route_in_vector_coverage(route_result) -> bool:
+    """Return True if the route's midpoint is within the vector baseline's Bay Area coverage."""
+    if not route_result or not route_result.route_coords:
+        return False
+    mid = route_result.route_coords[len(route_result.route_coords) // 2]
+    lat, lon = mid
+    bb = _VECTOR_BASELINE_BBOX
+    return bb["south"] <= lat <= bb["north"] and bb["west"] <= lon <= bb["east"]
+
+
 def _preload_graphs(loader: GraphLoader) -> None:
     for bbox in _DEMO_BBOXES:
         try:
@@ -347,20 +363,26 @@ with card_col:
             st.info("No stops match the selected categories.")
     else:
         # Vector baseline — semantic-only, no graph constraints
-        last_query = st.session_state.get("last_query", "")
-        _, vector_baseline = _load_heavy()
-        vector_results = vector_baseline.query(last_query, n_results=5) if last_query else []
-
-        if vector_results:
-            cards_html = (
-                '<div style="height:500px;overflow-y:auto;padding-right:6px;">'
-                + "".join(render_vector_card(r, i) for i, r in enumerate(vector_results, 1))
-                + "</div>"
-                + IMAGE_MODAL_HTML
+        if not _route_in_vector_coverage(route_result):
+            st.info(
+                "Vector Baseline covers Bay Area demo routes only. "
+                "GraphRAG works for any region."
             )
-            st.components.v1.html(cards_html, height=510, scrolling=False)
         else:
-            st.info("Run a route query first to populate the vector baseline.")
+            last_query = st.session_state.get("last_query", "")
+            _, vector_baseline = _load_heavy()
+            vector_results = vector_baseline.query(last_query, n_results=5) if last_query else []
+
+            if vector_results:
+                cards_html = (
+                    '<div style="height:500px;overflow-y:auto;padding-right:6px;">'
+                    + "".join(render_vector_card(r, i) for i, r in enumerate(vector_results, 1))
+                    + "</div>"
+                    + IMAGE_MODAL_HTML
+                )
+                st.components.v1.html(cards_html, height=510, scrolling=False)
+            else:
+                st.info("Run a route query first to populate the vector baseline.")
 
 # ── Narrative ─────────────────────────────────────────────────────────────────
 
@@ -371,24 +393,29 @@ narrative_label = (
 )
 with st.expander(narrative_label, expanded=True):
     if view_mode == "Vector Baseline":
-        if not st.session_state.get("vector_narrative"):
-            facade, vector_baseline = _load_heavy()
-            last_query = st.session_state.get("last_query", "")
-            v_results = vector_baseline.query(last_query, n_results=5) if last_query else []
-            v_context = "\n\n".join(
-                f"{r['name']} | {r['category']} | {r['description']}"
-                for r in v_results if r.get("description")
-            )
-            if v_context and not result.get("error") and result.get("route_result"):
-                route = result["route_result"]
-                with st.spinner("Generating vector baseline narrative…"):
-                    st.session_state["vector_narrative"] = facade.generate_narrative(
-                        origin=result.get("origin", ""),
-                        destination=result.get("destination", ""),
-                        distance_km=route.length_km,
-                        drive_time_min=route.drive_time_min,
-                        poi_context=v_context,
-                    )
-        st.markdown(st.session_state.get("vector_narrative") or narrative)
+        if not _route_in_vector_coverage(route_result):
+            # Route is outside Bay Area — show GraphRAG narrative with a note
+            st.caption("Vector Baseline seed collection covers Bay Area only. Showing GraphRAG narrative.")
+            st.markdown(narrative)
+        else:
+            if not st.session_state.get("vector_narrative"):
+                facade, vector_baseline = _load_heavy()
+                last_query = st.session_state.get("last_query", "")
+                v_results = vector_baseline.query(last_query, n_results=5) if last_query else []
+                v_context = "\n\n".join(
+                    f"{r['name']} | {r['category']} | {r['description']}"
+                    for r in v_results if r.get("description")
+                )
+                if v_context and not result.get("error") and result.get("route_result"):
+                    route = result["route_result"]
+                    with st.spinner("Generating vector baseline narrative…"):
+                        st.session_state["vector_narrative"] = facade.generate_narrative(
+                            origin=result.get("origin", ""),
+                            destination=result.get("destination", ""),
+                            distance_km=route.length_km,
+                            drive_time_min=route.drive_time_min,
+                            poi_context=v_context,
+                        )
+            st.markdown(st.session_state.get("vector_narrative") or narrative)
     else:
         st.markdown(narrative)
