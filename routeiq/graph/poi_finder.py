@@ -1,4 +1,5 @@
 from __future__ import annotations
+import gzip
 import json
 import os
 import time
@@ -6,11 +7,35 @@ import dataclasses
 import threading
 import pandas as pd
 import osmnx as ox
-from shapely.geometry import LineString
+from shapely.geometry import LineString, Point
 from routeiq.graph.poi import POI
 from routeiq.graph.graph_loader import _OVERPASS_MIRRORS
 
 _PER_MIRROR_TIMEOUT = 30  # hard wall-clock limit per Overpass attempt, independent of OSMnx retry logic
+
+# Pre-seeded Bay Area master POI file — committed to repo.
+# When present, POIFinder skips Overpass entirely and does in-memory spatial filtering.
+_MASTER_FILE = "bay_area_all.json.gz"
+
+# Tag filters — must stay in sync with scripts/seed_poi_cache.py
+_SCENIC_TOURISM = [
+    "viewpoint", "museum", "attraction", "aquarium", "zoo",
+    "theme_park", "lighthouse", "monument", "winery",
+]
+_SCENIC_HISTORIC = [
+    "castle", "fort", "monument", "memorial", "ruins",
+    "archaeological_site", "lighthouse", "manor", "battlefield",
+]
+_SCENIC_NATURAL = [
+    "peak", "volcano", "beach", "cape", "cliff", "waterfall",
+    "hot_spring", "cave_entrance", "bay", "glacier", "wood",
+]
+_TAGS = {
+    "tourism": _SCENIC_TOURISM,
+    "historic": _SCENIC_HISTORIC,
+    "natural": _SCENIC_NATURAL,
+}
+_GENERIC_VALUES = {"yes", "no", "true", "false", "tourism", "historic", "natural"}
 
 
 class OverpassUnavailableError(Exception):
@@ -24,6 +49,7 @@ class POIFinder:
         self._buffer_km = buffer_km
         self._cache_dir = cache_dir
         os.makedirs(cache_dir, exist_ok=True)
+        self._master_path = os.path.join(cache_dir, _MASTER_FILE)
 
     def find_pois(
         self,
@@ -34,48 +60,68 @@ class POIFinder:
         if not route_coords:
             return []
 
-        t1 = time.perf_counter()
         line = LineString([(lon, lat) for lat, lon in route_coords])
         buffer_deg = self._buffer_km / 111.0
         buffer_poly = line.buffer(buffer_deg)
-        print(f"[timing]     poi buffer build: {time.perf_counter()-t1:.2f}s ({len(route_coords)} coords)", flush=True)
 
-        # Scenic tourism subtypes only — excludes hotels, hostels, artwork, campsites
-        _SCENIC_TOURISM = [
-            "viewpoint", "museum", "attraction", "aquarium", "zoo",
-            "theme_park", "lighthouse", "monument", "winery",
-        ]
-        # Explicit historic subtypes with reliable Wikipedia coverage.
-        # "historic: True" returned thousands of minor features (roads, fences, districts)
-        # whose names don't resolve to Wikipedia articles, breaking enrichment entirely.
-        _SCENIC_HISTORIC = [
-            "castle", "fort", "monument", "memorial", "ruins",
-            "archaeological_site", "lighthouse", "manor", "battlefield",
-        ]
-        # Natural subtypes worth visiting on a road trip
-        _SCENIC_NATURAL = [
-            "peak", "volcano", "beach", "cape", "cliff", "waterfall",
-            "hot_spring", "cave_entrance", "bay", "glacier", "wood",
-        ]
-        tags = {
-            "tourism": _SCENIC_TOURISM,
-            "historic": _SCENIC_HISTORIC,
-            "natural": _SCENIC_NATURAL,
-        }
+        # --- Path 1: Bay Area master file (preferred — no Overpass call) ---
+        if os.path.exists(self._master_path):
+            result = self._filter_master(buffer_poly, t0)
+            if result is not None:
+                return result
+
+        # --- Path 2: Per-route cache (fallback for non-Bay-Area routes) ---
         minx, miny, maxx, maxy = buffer_poly.bounds
-        cache_key = f"pois_n{maxy:.3f}_s{miny:.3f}_e{maxx:.3f}_w{minx:.3f}.json"
-        cache_path = os.path.join(self._cache_dir, cache_key)
+        stem = f"pois_n{maxy:.3f}_s{miny:.3f}_e{maxx:.3f}_w{minx:.3f}"
+        gz_path = os.path.join(self._cache_dir, f"{stem}.json.gz")
+        json_path = os.path.join(self._cache_dir, f"{stem}.json")  # legacy
 
-        if os.path.exists(cache_path):
+        if os.path.exists(gz_path):
             t1 = time.perf_counter()
-            with open(cache_path) as f:
+            with gzip.open(gz_path, "rb") as f:
+                pois = [POI(**d) for d in json.loads(f.read())]
+            print(f"[timing]     poi per-route cache HIT (gz): {time.perf_counter()-t1:.2f}s → {len(pois)} POIs", flush=True)
+            return pois
+        if os.path.exists(json_path):
+            t1 = time.perf_counter()
+            with open(json_path) as f:
                 pois = [POI(**d) for d in json.load(f)]
-            print(f"[timing]     poi cache HIT: {time.perf_counter()-t1:.2f}s → {len(pois)} POIs", flush=True)
+            print(f"[timing]     poi per-route cache HIT (json): {time.perf_counter()-t1:.2f}s → {len(pois)} POIs", flush=True)
             return pois
 
+        # --- Path 3: Live Overpass query (fallback for uncached routes) ---
+        return self._query_overpass(buffer_poly, gz_path, progress_fn, t0)
+
+    # ------------------------------------------------------------------
+
+    def _filter_master(self, buffer_poly, t0: float) -> list[POI] | None:
+        """Load master file and filter spatially. Returns None if master doesn't cover this area."""
+        t1 = time.perf_counter()
+        with gzip.open(self._master_path, "rb") as f:
+            all_pois = [POI(**d) for d in json.loads(f.read())]
+        load_s = time.perf_counter() - t1
+
+        t1 = time.perf_counter()
+        filtered = [p for p in all_pois if buffer_poly.contains(Point(p.lon, p.lat))]
+        filter_s = time.perf_counter() - t1
+
+        print(
+            f"[timing]     poi master: load {load_s:.2f}s ({len(all_pois)} total) "
+            f"+ filter {filter_s:.3f}s → {len(filtered)} in buffer",
+            flush=True,
+        )
+        if not filtered:
+            print("[timing]     poi master: 0 results — route outside master coverage, falling through", flush=True)
+            return None
+        print(f"[timing]   poi find_pois total: {time.perf_counter()-t0:.2f}s", flush=True)
+        return filtered
+
+    def _query_overpass(self, buffer_poly, cache_path: str, progress_fn, t0: float) -> list[POI]:
+        minx, miny, maxx, maxy = buffer_poly.bounds
         print(f"[timing]     poi cache MISS — querying Overpass", flush=True)
         n_mirrors = len(_OVERPASS_MIRRORS)
         gdf = None
+
         for idx, mirror in enumerate(_OVERPASS_MIRRORS, 1):
             if progress_fn:
                 progress_fn(f"Querying POI server {idx}/{n_mirrors}…")
@@ -86,7 +132,7 @@ class POIFinder:
             def _fetch(m=mirror, rh=result_holder, eh=error_holder):
                 try:
                     ox.settings.overpass_url = m
-                    rh[0] = ox.features_from_bbox(bbox=(minx, miny, maxx, maxy), tags=tags)
+                    rh[0] = ox.features_from_bbox(bbox=(minx, miny, maxx, maxy), tags=_TAGS)
                 except Exception as exc:
                     eh[0] = exc
 
@@ -108,13 +154,12 @@ class POIFinder:
             gdf = result_holder[0]
             print(f"[timing]     overpass {mirror}: {elapsed:.2f}s → {len(gdf)} rows", flush=True)
             break
+
         if gdf is None:
             raise OverpassUnavailableError(
                 f"All {n_mirrors} Overpass mirrors timed out or failed. "
                 "The OpenStreetMap POI service is temporarily unavailable."
             )
-
-        _GENERIC_VALUES = {"yes", "no", "true", "false", "tourism", "historic", "natural"}
 
         t1 = time.perf_counter()
         pois: list[POI] = []
@@ -133,14 +178,11 @@ class POIFinder:
                 continue
 
             if pd.notna(row.get("historic")):
-                category = "historic"
-                subtype = str(row.get("historic"))
+                category, subtype = "historic", str(row.get("historic"))
             elif pd.notna(row.get("tourism")):
-                category = "tourism"
-                subtype = str(row.get("tourism"))
+                category, subtype = "tourism", str(row.get("tourism"))
             elif pd.notna(row.get("natural")):
-                category = "natural"
-                subtype = str(row.get("natural"))
+                category, subtype = "natural", str(row.get("natural"))
             else:
                 continue
 
@@ -148,20 +190,18 @@ class POIFinder:
             if pd.isna(wikipedia_tag):
                 wikipedia_tag = None
 
-            pois.append(
-                POI(
-                    name=str(name),
-                    category=category,
-                    lat=centroid.y,
-                    lon=centroid.x,
-                    osm_id=str(row.name),
-                    wikipedia_tag=wikipedia_tag,
-                    subtype=subtype,
-                )
-            )
+            pois.append(POI(
+                name=str(name),
+                category=category,
+                lat=centroid.y,
+                lon=centroid.x,
+                osm_id=str(row.name),
+                wikipedia_tag=wikipedia_tag,
+                subtype=subtype,
+            ))
         print(f"[timing]     spatial filter: {time.perf_counter()-t1:.2f}s → {len(pois)} POIs kept", flush=True)
 
-        with open(cache_path, "w") as f:
-            json.dump([dataclasses.asdict(p) for p in pois], f)
+        with gzip.open(cache_path, "wb") as f:
+            f.write(json.dumps([dataclasses.asdict(p) for p in pois]).encode())
         print(f"[timing]   poi find_pois total: {time.perf_counter()-t0:.2f}s", flush=True)
         return pois

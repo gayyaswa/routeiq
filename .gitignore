@@ -6,7 +6,11 @@ __pycache__/
 chroma_db/
 *.cache
 osm_cache/
-cache/
+cache/graphs/
+cache/chroma/
+cache/osmnx/
+cache/*.json
+# cache/pois/ is intentionally NOT ignored — bay_area_all.json.gz + per-route JSONs committed for demo reliability
 day1_map.html
 .DS_Store
 .claude/
