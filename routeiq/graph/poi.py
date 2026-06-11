@@ -14,3 +14,4 @@ class POI:
     wikipedia_tag: str | None = None  # populated by RAG layer on Day 3
     image_url: str | None = None      # Wikipedia thumbnail, populated on Day 3
     description: str | None = None   # Wikipedia extract, populated on Day 3
+    subtype: str | None = None        # OSM value: "viewpoint", "beach", "fort", etc.

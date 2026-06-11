@@ -192,3 +192,67 @@ constraints; open-ended discovery queries (`"best X near Y"`) benefit from pure 
 recall. A production system would classify query intent first and dispatch accordingly.
 This is validated by the evaluation in `eval/results.md`: 6/6 GraphRAG wins on route
 queries, 4/4 vector wins on semantic queries, 10/10 total prediction accuracy.
+
+---
+
+## POI Selection — Ranking Beyond Detour Cost
+
+### OSM `wikipedia` tag as a notability proxy
+
+**Observation:** Sorting candidates purely by detour cost fills all five selection slots
+with the cheapest POIs geographically — which, on a route through a dense city, means
+five obscure street-level monuments in the same neighbourhood. The Golden Gate Bridge,
+right on the route, was crowded out by plaques and memorials at the same 0-min detour.
+
+**Fix:** Two-tier sort: `(0 if wikipedia_tag else 1, detour_min)`. OSM contributors only
+add the `wikipedia` tag to features that have a verified Wikipedia article — it's a
+crowd-sourced notability signal. Wikipedia-tagged candidates claim their geographic spread
+slot first; untagged plaques only fill in if no notable landmark is nearby.
+
+**Learning:** OSM metadata encodes human judgement about what matters. The `wikipedia`
+tag is not just a link — it's a quality signal. In geospatial RAG, mining OSM tags for
+implicit quality signals (wikipedia, wikidata, heritage designation level) is cheaper
+and more reliable than trying to infer popularity from name strings or external APIs.
+
+---
+
+### Scenic subtype score — detour cost is not scenic value
+
+**Observation:** Among wikipedia-tagged POIs, detour cost still doesn't distinguish a
+dramatic waterfall from a historic plaque two steps off the road. A viewpoint at 3-min
+detour is a better scenic stop than a memorial at 0-min detour.
+
+**Fix:** Added a `subtype` field to the `POI` dataclass (populated from the OSM value:
+`viewpoint`, `beach`, `fort`, `lighthouse`, `memorial`, etc.). `POISelector` uses a
+scenic score per subtype as the second sort tier, so the final key is
+`(notability, -scenic_score, detour_min)`.
+
+**Learning:** "Closest stop" and "best stop" are different problems. Detour cost is
+a constraint, not a quality signal. Scenic and experiential value needs an explicit
+model — even a simple lookup table over OSM subtypes beats pure proximity for user
+satisfaction on a road trip app.
+
+---
+
+### KnowledgeGraph centrality as a future popularity signal
+
+**The idea:** The current `KnowledgeRAG` runs after POI selection, operating only on
+already-chosen POIs. If it were restructured to run over the full candidate pool
+(e.g. top-30 POIs), `RouteKnowledgeGraph` could compute graph centrality (degree or
+PageRank) over the proximity graph. Highly-connected POI nodes — those that many other
+nearby POIs link to — are likely major landmarks, not local plaques.
+
+**Why it's a good GraphRAG signal:** Centrality is a structural popularity measure that
+doesn't require external API calls. It emerges from the spatial relationships already
+encoded in the graph. A world-famous bridge scores high because every viewpoint, fort,
+and memorial in the area has a `NEAR_POI` edge pointing at it.
+
+**Why it's deferred:** For a 5-POI selection over a 30-candidate pool, the centrality
+computation is fast, but the pipeline refactor (select-large → enrich → graph-score →
+reselect) adds latency and complexity that isn't justified until the route network
+scales to multi-city corridors or a persistent Neo4j backend. The `wikipedia_tag` +
+scenic subtype approach captures 90% of the benefit with a fraction of the complexity.
+
+**Natural Week 2 evolution:** Add centrality scoring to `KnowledgeRAG`, expose it as
+an optional re-ranking pass in the pipeline, and A/B test it against the current
+heuristic approach using the 10-query evaluation set.

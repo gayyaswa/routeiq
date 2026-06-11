@@ -6,6 +6,30 @@ from routeiq.ui import CATEGORY_COLORS
 
 _PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80'%3E%3Crect width='80' height='80' fill='%23ecf0f1'/%3E%3C/svg%3E"
 
+# Append once to any cards container. Provides a full-iframe lightbox triggered by
+# riShow(url) — called from clickable card images.
+IMAGE_MODAL_HTML = """
+<div id="ri-modal" onclick="this.style.display='none'"
+     style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;
+            background:rgba(0,0,0,0.88);z-index:9999;cursor:pointer;
+            align-items:center;justify-content:center;flex-direction:column;gap:10px;">
+  <img id="ri-img" style="max-width:92%;max-height:86%;border-radius:10px;
+                           box-shadow:0 8px 40px rgba(0,0,0,0.7);" />
+  <span style="color:rgba(255,255,255,0.55);font-size:11px;font-family:-apple-system,sans-serif;">
+    Click anywhere or press Esc to close
+  </span>
+</div>
+<script>
+function riShow(src){
+  document.getElementById('ri-img').src=src;
+  document.getElementById('ri-modal').style.display='flex';
+}
+document.addEventListener('keydown',function(e){
+  if(e.key==='Escape')document.getElementById('ri-modal').style.display='none';
+});
+</script>
+"""
+
 _CARD_WRAP = """
 <div style="
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -22,11 +46,19 @@ _CARD_WRAP = """
 """
 
 
-def _img_tag(src: str) -> str:
+def _img_tag(src: str, zoom_src: str | None = None) -> str:
+    """Image tag. zoom_src enables click-to-enlarge via the riShow() lightbox."""
+    cursor = "cursor:zoom-in;" if zoom_src else ""
+    click = (
+        f' onclick="riShow(\'{zoom_src}\')"'
+        f' onerror="this.src=\'{_PLACEHOLDER}\';this.style.cursor=\'default\';this.onclick=null"'
+        if zoom_src
+        else f' onerror="this.src=\'{_PLACEHOLDER}\'"'
+    )
     return (
         f'<img src="{src}" '
-        f'style="width:80px;height:80px;object-fit:cover;border-radius:6px;flex-shrink:0;" '
-        f'onerror="this.src=\'{_PLACEHOLDER}\'" />'
+        f'style="width:80px;height:80px;object-fit:cover;border-radius:6px;flex-shrink:0;{cursor}"'
+        f'{click} />'
     )
 
 
@@ -52,7 +84,7 @@ def render_stop_card(sp: ScoredPOI, rank: int) -> str:
     p = sp.poi
     color = CATEGORY_COLORS.get(p.category, "#7f8c8d")
     category_label = p.category.capitalize()
-    img = _img_tag(p.image_url or _PLACEHOLDER)
+    img = _img_tag(p.image_url or _PLACEHOLDER, zoom_src=p.image_url or None)
     body = (
         f'<div style="flex:1;min-width:0;">'
         f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">'
@@ -76,7 +108,8 @@ def render_vector_card(result: dict, rank: int) -> str:
     color = CATEGORY_COLORS.get(result.get("category", ""), "#7f8c8d")
     category_label = result.get("category", "").capitalize()
     score_label = f"similarity {result.get('similarity_score', 0):.3f}"
-    img = _img_tag(_PLACEHOLDER)
+    img_url = result.get("image_url") or None
+    img = _img_tag(img_url or _PLACEHOLDER, zoom_src=img_url)
     body = (
         f'<div style="flex:1;min-width:0;">'
         f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">'

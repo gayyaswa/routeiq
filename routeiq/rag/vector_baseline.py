@@ -34,6 +34,7 @@ class VectorBaseline:
                 "category": meta["category"],
                 "description": doc,
                 "similarity_score": round(1.0 - dist, 4),
+                "image_url": meta.get("image_url") or None,
             }
             for meta, doc, dist in zip(
                 results["metadatas"][0],

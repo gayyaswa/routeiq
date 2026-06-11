@@ -9,6 +9,7 @@ from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, END
 
 from routeiq.graph import GraphLoader, RouteGraph, POIFinder
+from routeiq.graph.poi_finder import OverpassUnavailableError
 from routeiq.routing import DetourScorer, POISelector
 from routeiq.insights import QueryParser, NarrativeChain, FallbackChain
 from routeiq.rag import WikipediaFetcher, POIIndexer, POIRetriever, POIChunker, KnowledgeRAG
@@ -202,7 +203,25 @@ class RoutePipeline:
 
         self._progress("graph", "Scanning route corridor for POIs…")
         t1 = time.perf_counter()
-        pois = self._poi_finder.find_pois(route_result.route_coords)
+        try:
+            pois = self._poi_finder.find_pois(
+                route_result.route_coords,
+                progress_fn=lambda msg: self._progress("graph", msg),
+            )
+        except OverpassUnavailableError as e:
+            return {
+                "error": "overpass_unavailable",
+                "fallback_reason": (
+                    "The OpenStreetMap POI server (Overpass API) is temporarily unavailable — "
+                    "all mirrors timed out. This is a transient outage, not a problem with your query. "
+                    "Please try again in a minute or two."
+                ),
+                "origin_lat": origin_lat,
+                "origin_lon": origin_lon,
+                "dest_lat": dest_lat,
+                "dest_lon": dest_lon,
+                "route_result": route_result,
+            }
         print(f"[timing]   POI scan: {time.perf_counter()-t1:.2f}s → {len(pois)} raw POIs", flush=True)
 
         t1 = time.perf_counter()

@@ -14,8 +14,14 @@ _REQUEST_TIMEOUT = 15  # Wikipedia API can respond slowly; 5s caused silent enri
 class WikipediaFetcher:
     """Enriches POI objects with Wikipedia text extract and thumbnail URL (Strategy pattern)."""
 
+    # Wikipedia API policy requires a descriptive User-Agent or requests return 403.
+    _USER_AGENT = "RouteIQ/1.0 (scenic route assistant; guruplace04@gmail.com)"
+
     def __init__(self, session: requests.Session | None = None) -> None:
-        self._session = session or requests.Session()
+        if session is None:
+            session = requests.Session()
+            session.headers.update({"User-Agent": self._USER_AGENT})
+        self._session = session
 
     def enrich(self, poi: POI) -> None:
         """Mutates poi in-place: sets description and image_url from Wikipedia."""
@@ -70,25 +76,28 @@ class WikipediaFetcher:
             return tag.split(":", 1)[-1] if ":" in tag else tag
 
         # name-based fallback via MediaWiki opensearch.
-        # Appending "California" dramatically improves disambiguation — bare POI names
-        # like "Lighthouse" or "Adobe" resolve to generic articles with empty extracts.
-        try:
-            resp = self._session.get(
-                _SEARCH_URL,
-                params={
-                    "action": "opensearch",
-                    "search": f"{poi.name} California",
-                    "limit": 1,
-                    "namespace": 0,
-                    "format": "json",
-                },
-                timeout=_REQUEST_TIMEOUT,
-            )
-            if resp.status_code != 200:
-                return None
-            results = resp.json()
-            # opensearch returns [query, [titles], [descriptions], [urls]]
-            titles = results[1] if len(results) > 1 else []
-            return titles[0] if titles else None
-        except Exception:
-            return None
+        # Try exact name first — specific names like "Pigeon Point Lighthouse" match directly.
+        # Fall back to "<name> California" for generic names that need geo-disambiguation
+        # (e.g., "Lighthouse" or "Adobe" would otherwise resolve to unrelated articles).
+        for query in [poi.name, f"{poi.name} California"]:
+            try:
+                resp = self._session.get(
+                    _SEARCH_URL,
+                    params={
+                        "action": "opensearch",
+                        "search": query,
+                        "limit": 1,
+                        "namespace": 0,
+                        "format": "json",
+                    },
+                    timeout=_REQUEST_TIMEOUT,
+                )
+                if resp.status_code != 200:
+                    continue
+                results = resp.json()
+                titles = results[1] if len(results) > 1 else []
+                if titles:
+                    return titles[0]
+            except Exception:
+                continue
+        return None

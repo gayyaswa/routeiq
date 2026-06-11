@@ -13,6 +13,10 @@ from routeiq.graph.graph_loader import _OVERPASS_MIRRORS
 _PER_MIRROR_TIMEOUT = 30  # hard wall-clock limit per Overpass attempt, independent of OSMnx retry logic
 
 
+class OverpassUnavailableError(Exception):
+    """Raised when every Overpass mirror times out or errors — distinct from an empty result."""
+
+
 class POIFinder:
     """Spatially joins OSM features within a buffer around a route (Pipeline pattern)."""
 
@@ -21,7 +25,11 @@ class POIFinder:
         self._cache_dir = cache_dir
         os.makedirs(cache_dir, exist_ok=True)
 
-    def find_pois(self, route_coords: list[tuple[float, float]]) -> list[POI]:
+    def find_pois(
+        self,
+        route_coords: list[tuple[float, float]],
+        progress_fn=None,
+    ) -> list[POI]:
         t0 = time.perf_counter()
         if not route_coords:
             return []
@@ -66,8 +74,11 @@ class POIFinder:
             return pois
 
         print(f"[timing]     poi cache MISS — querying Overpass", flush=True)
+        n_mirrors = len(_OVERPASS_MIRRORS)
         gdf = None
-        for mirror in _OVERPASS_MIRRORS:
+        for idx, mirror in enumerate(_OVERPASS_MIRRORS, 1):
+            if progress_fn:
+                progress_fn(f"Querying POI server {idx}/{n_mirrors}…")
             t1 = time.perf_counter()
             result_holder: list = [None]
             error_holder: list = [None]
@@ -86,15 +97,22 @@ class POIFinder:
             elapsed = time.perf_counter() - t1
             if fetch_thread.is_alive():
                 print(f"[timing]     overpass {mirror}: TIMEOUT after {elapsed:.1f}s → next mirror", flush=True)
+                if progress_fn:
+                    progress_fn(f"POI server {idx}/{n_mirrors} timed out — trying backup…")
                 continue
             if error_holder[0] is not None:
                 print(f"[timing]     overpass {mirror}: FAILED after {elapsed:.2f}s ({error_holder[0]})", flush=True)
+                if progress_fn:
+                    progress_fn(f"POI server {idx}/{n_mirrors} unavailable — trying backup…")
                 continue
             gdf = result_holder[0]
             print(f"[timing]     overpass {mirror}: {elapsed:.2f}s → {len(gdf)} rows", flush=True)
             break
         if gdf is None:
-            return []
+            raise OverpassUnavailableError(
+                f"All {n_mirrors} Overpass mirrors timed out or failed. "
+                "The OpenStreetMap POI service is temporarily unavailable."
+            )
 
         _GENERIC_VALUES = {"yes", "no", "true", "false", "tourism", "historic", "natural"}
 
@@ -116,10 +134,13 @@ class POIFinder:
 
             if pd.notna(row.get("historic")):
                 category = "historic"
+                subtype = str(row.get("historic"))
             elif pd.notna(row.get("tourism")):
                 category = "tourism"
+                subtype = str(row.get("tourism"))
             elif pd.notna(row.get("natural")):
                 category = "natural"
+                subtype = str(row.get("natural"))
             else:
                 continue
 
@@ -135,6 +156,7 @@ class POIFinder:
                     lon=centroid.x,
                     osm_id=str(row.name),
                     wikipedia_tag=wikipedia_tag,
+                    subtype=subtype,
                 )
             )
         print(f"[timing]     spatial filter: {time.perf_counter()-t1:.2f}s → {len(pois)} POIs kept", flush=True)
