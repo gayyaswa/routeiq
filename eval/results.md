@@ -1,6 +1,6 @@
 # RouteIQ Evaluation: GraphRAG vs Vector Baseline
 
-*Generated 2026-06-10 23:07 — `python3 eval/run_eval.py`*
+*Generated 2026-06-12 09:56 — `python3 eval/run_eval.py`*
 
 ## Results
 
