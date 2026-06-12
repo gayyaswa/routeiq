@@ -1,32 +1,39 @@
 import pytest
-from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableLambda
 
 from routeiq.insights import QueryParser
 from routeiq.insights.prompts import QUERY_PARSER_PROMPT
+from routeiq.insights.route_input import RouteInput
 
-_VALID_JSON = '{"origin": "Austin, TX", "destination": "San Antonio, TX", "preferences": ["historic"]}'
-_BAD_JSON = "I cannot parse this as a route request"
+
+class _MockLLM:
+    """Test double for a chat model — with_structured_output returns a fixed RouteInput."""
+
+    def __init__(self, result: RouteInput):
+        self._result = result
+
+    def with_structured_output(self, schema):
+        result = self._result
+        return RunnableLambda(lambda _: result)
+
+
+_VALID_RESULT = RouteInput(
+    origin="Austin, TX",
+    destination="San Antonio, TX",
+    preferences=["historic"],
+)
+
+_EMPTY_RESULT = RouteInput(origin=None, destination=None, preferences=[])
 
 
 @pytest.fixture
-def valid_llm():
-    return RunnableLambda(lambda msgs: AIMessage(content=_VALID_JSON))
+def parser():
+    return QueryParser(QUERY_PARSER_PROMPT, _MockLLM(_VALID_RESULT))
 
 
 @pytest.fixture
-def bad_llm():
-    return RunnableLambda(lambda msgs: AIMessage(content=_BAD_JSON))
-
-
-@pytest.fixture
-def parser(valid_llm):
-    return QueryParser(QUERY_PARSER_PROMPT, valid_llm)
-
-
-@pytest.fixture
-def bad_parser(bad_llm):
-    return QueryParser(QUERY_PARSER_PROMPT, bad_llm)
+def empty_parser():
+    return QueryParser(QUERY_PARSER_PROMPT, _MockLLM(_EMPTY_RESULT))
 
 
 class TestQueryParserParse:
@@ -51,15 +58,15 @@ class TestQueryParserParse:
         assert "_parse_error" not in result
 
 
-class TestQueryParserMalformedJSON:
-    def test_malformed_json_returns_parse_error_key(self, bad_parser):
-        result = bad_parser.parse("take me somewhere nice")
-        assert "_parse_error" in result
-
-    def test_malformed_json_origin_is_none(self, bad_parser):
-        result = bad_parser.parse("take me somewhere nice")
+class TestQueryParserNullFields:
+    def test_null_origin_returned(self, empty_parser):
+        result = empty_parser.parse("take me somewhere nice")
         assert result["origin"] is None
 
-    def test_malformed_json_preferences_is_empty_list(self, bad_parser):
-        result = bad_parser.parse("take me somewhere nice")
+    def test_null_destination_returned(self, empty_parser):
+        result = empty_parser.parse("take me somewhere nice")
+        assert result["destination"] is None
+
+    def test_empty_preferences_returned(self, empty_parser):
+        result = empty_parser.parse("take me somewhere nice")
         assert result["preferences"] == []

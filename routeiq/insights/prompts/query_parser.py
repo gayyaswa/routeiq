@@ -10,9 +10,7 @@ QUERY_PARSER_PROMPT_V1 = ChatPromptTemplate.from_messages([
 Few-shot examples:
 {examples}
 
-Return a single compact JSON line with keys: origin, destination, preferences (list of strings).
 Rules:
-- Output only the JSON object on one line — no newlines, no markdown, no explanation.
 - Always include the US state abbreviation in origin and destination (e.g. "San Jose, CA" not "San Jose").
 - If any field cannot be determined, set it to null.
 
