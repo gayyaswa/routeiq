@@ -102,7 +102,7 @@ def _render_stepper(state: dict) -> str:
                 rows.append(
                     '<div class="riq-slow-warn">'
                     "⏳ Fetching from OpenStreetMap server — may take 1–3 min on first run. "
-                    "Bay Area demo routes use local cache and skip this wait."
+                    "Once downloaded, the graph is cached locally — same route is instant next time."
                     "</div>"
                 )
         if i < len(_STEPS) - 1:
