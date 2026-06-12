@@ -25,7 +25,7 @@ streamlit run app.py
 | `ANTHROPIC_API_KEY` | — | Required when `LLM_PROVIDER=anthropic` |
 | `NEBIUS_API_KEY` | — | Required when `LLM_PROVIDER=nebius` |
 
-> **First query:** ~30–60 s while OSMnx downloads the road network for the corridor and Overpass fetches POIs. Both are cached to `cache/` — subsequent queries for the same corridor take ~5 s.
+> **Demo routes load instantly** — road network graphs for all 5 demo corridors are bundled in the repo. Custom routes outside those corridors trigger a one-time OSMnx download (~30–60 s), after which they are cached locally.
 
 ---
 
