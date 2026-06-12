@@ -54,11 +54,19 @@ _STEPPER_CSS = """
 .riq-label.riq-done{color:#22c55e;}
 .riq-label.riq-active{color:#3b82f6;}
 .riq-label.riq-pending{color:#9ca3af;}
-.riq-subtask{font-size:13px;color:#6b7280;font-style:italic;margin-left:30px;margin-bottom:6px;}
+.riq-subtask{font-size:13px;color:#6b7280;font-style:italic;margin-left:30px;margin-bottom:4px;}
+.riq-slow-warn{font-size:12px;font-weight:600;color:#b45309;background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;padding:5px 10px;margin-left:30px;margin-bottom:8px;}
 .riq-connector{width:2px;height:14px;background:#e5e7eb;margin-left:13px;margin-bottom:4px;}
 @keyframes riq-pulse{0%,100%{opacity:1}50%{opacity:0.2}}
 </style>
 """
+
+# Subtask keywords that indicate a live server fetch (slow outside Bay Area)
+_SLOW_SUBTASK_KEYWORDS = (
+    "Loading OSM road network",
+    "Querying POI server",
+    "POI server",
+)
 
 _STEPS = [
     ("parse",   "Parsing your query",                  "🔍"),
@@ -90,6 +98,13 @@ def _render_stepper(state: dict) -> str:
         )
         if step_id == current and subtask:
             rows.append(f'<div class="riq-subtask">{subtask}</div>')
+            if any(kw in subtask for kw in _SLOW_SUBTASK_KEYWORDS):
+                rows.append(
+                    '<div class="riq-slow-warn">'
+                    "⏳ Fetching from OpenStreetMap server — may take 1–3 min on first run. "
+                    "Bay Area demo routes use local cache and skip this wait."
+                    "</div>"
+                )
         if i < len(_STEPS) - 1:
             rows.append('<div class="riq-connector"></div>')
 
@@ -107,6 +122,15 @@ _DEMO_BBOXES = [
     dict(north=37.5, south=36.8, east=-121.7, west=-122.2),  # SJ → Santa Cruz
     dict(north=37.9, south=37.3, east=-122.2, west=-122.6),  # SF → Half Moon Bay
     dict(north=37.96, south=37.67, east=-122.32, west=-122.58),  # SF → Sausalito (Golden Gate Bridge)
+]
+
+# Short label → full query string for demo hint buttons
+_DEMO_ROUTES = [
+    ("SF → Muir Woods 🌲", "Drive from San Francisco to Muir Woods, show redwoods and coastal views"),
+    ("SF → Napa 🍷", "Road trip from San Francisco to Napa Valley, show wineries and historic towns"),
+    ("SJ → Santa Cruz 🏖", "Drive from San Jose to Santa Cruz, show redwoods and beaches"),
+    ("SF → Half Moon Bay 🌊", "Road trip from San Francisco to Half Moon Bay, show coastal cliffs and beaches"),
+    ("SF → Sausalito 🌉", "Drive from San Francisco to Sausalito via the Golden Gate Bridge, show historic sites and bay views"),
 ]
 
 
@@ -205,6 +229,44 @@ def _load_heavy():
     return facade, vbaseline
 
 
+def _run_pipeline_thread(
+    query: str,
+    cancel_event: threading.Event,
+    result_holder: dict,
+    progress_dict: dict,
+) -> None:
+    """Run the RouteIQ pipeline in a background thread; writes status + result to result_holder."""
+    facade, _ = _load_heavy()
+
+    def on_progress(step: str, subtask: str) -> None:
+        if cancel_event.is_set():
+            raise RuntimeError("cancelled")
+        if step == "narrate_stream":
+            progress_dict["narrative_buffer"] = progress_dict.get("narrative_buffer", "") + subtask
+            return
+        current = progress_dict.get("current")
+        if current and current != step:
+            done = set(progress_dict.get("done", set()))
+            done.add(current)
+            progress_dict["done"] = done
+        progress_dict["current"] = step
+        progress_dict["subtask"] = subtask
+
+    try:
+        state = facade.run(query, on_progress=on_progress)
+        result_holder["status"] = "done"
+        result_holder["result"] = state
+    except RuntimeError as exc:
+        if "cancelled" in str(exc).lower():
+            result_holder["status"] = "cancelled"
+        else:
+            result_holder["status"] = "error"
+            result_holder["error"] = str(exc)
+    except Exception as exc:
+        result_holder["status"] = "error"
+        result_holder["error"] = str(exc)
+
+
 _log("starting background init thread")
 _bg_init_thread = threading.Thread(
     target=lambda: _load_lightweight(),
@@ -229,61 +291,120 @@ if _bg_init_thread.is_alive():
 
 # ── Query input ───────────────────────────────────────────────────────────────
 
+_pipeline_status = st.session_state.get("_pipeline_status", "idle")
+_is_running = _pipeline_status == "running"
+
+# Demo route hint buttons
+st.caption("Try a demo route:")
+hint_cols = st.columns(len(_DEMO_ROUTES))
+for col, (label, route) in zip(hint_cols, _DEMO_ROUTES):
+    if col.button(label, key=f"hint_{label}", disabled=_is_running, use_container_width=True):
+        st.session_state["route_query"] = route
+        st.session_state["_auto_run"] = True
+        st.rerun()
+
+st.markdown(
+    '<p style="font-size:12px;color:#6b7280;margin:2px 0 10px 0;">'
+    "✅ <b>Bay Area routes above use locally cached OSM data — no server wait.</b> "
+    "Routes outside the Bay Area download road network and POI data from OpenStreetMap servers on first run "
+    "and <b>may take 1–3 minutes</b>."
+    "</p>",
+    unsafe_allow_html=True,
+)
+
 query_input = st.text_input(
     "route_query",
     placeholder="e.g. Drive from San Francisco to Sausalito via the Golden Gate Bridge, show historic sites and bay views",
     label_visibility="collapsed",
+    key="route_query",
 )
-run_btn = st.button("Find Scenic Stops ›", type="primary")
 
-if run_btn and query_input.strip():
-    facade, vector_baseline = _load_heavy()
+run_col, cancel_col = st.columns([4, 1])
+with run_col:
+    run_btn = st.button("Find Scenic Stops ›", type="primary", disabled=_is_running, use_container_width=True)
+with cancel_col:
+    cancel_btn = st.button("⛔ Cancel", disabled=not _is_running, use_container_width=True)
+
+_auto_run = st.session_state.pop("_auto_run", False)
+
+# Cancel: signal the background thread
+if cancel_btn and _is_running:
+    cancel_ev = st.session_state.get("_pipeline_cancel")
+    if cancel_ev:
+        cancel_ev.set()
+
+# Start a new run
+if (run_btn or _auto_run) and query_input.strip() and not _is_running:
+    cancel_event = threading.Event()
+    result_holder: dict = {}
+    progress_dict: dict = {"current": None, "done": set(), "subtask": "", "narrative_buffer": ""}
+
+    st.session_state["_pipeline_cancel"] = cancel_event
+    st.session_state["_pipeline_result_holder"] = result_holder
+    st.session_state["_pipeline_progress"] = progress_dict
+    st.session_state["_pipeline_status"] = "running"
+    st.session_state["_running_query"] = query_input.strip()
+    st.session_state.pop("result", None)
+    st.session_state.pop("vector_narrative", None)
+
+    thread = threading.Thread(
+        target=_run_pipeline_thread,
+        args=(query_input.strip(), cancel_event, result_holder, progress_dict),
+        daemon=True,
+    )
+    st.session_state["_pipeline_thread"] = thread
+    thread.start()
+    st.rerun()
+
+# Poll while pipeline is running
+if _is_running:
+    progress_dict = st.session_state["_pipeline_progress"]
+    thread = st.session_state.get("_pipeline_thread")
 
     stepper_placeholder = st.empty()
-    narrative_stream_placeholder = st.empty()
-    _step_state: dict = {"current": None, "done": set(), "subtask": ""}
-    _narrative_buffer = [""]
-    _last_narrate_push = [0.0]
+    stepper_placeholder.markdown(_render_stepper(progress_dict), unsafe_allow_html=True)
 
-    def _on_progress(step: str, subtask: str) -> None:
-        if step == "narrate_stream":
-            _narrative_buffer[0] += subtask
-            now = time.perf_counter()
-            if now - _last_narrate_push[0] < 0.12:  # throttle: ~8 UI updates/sec
-                return
-            _last_narrate_push[0] = now
-            tail = _narrative_buffer[0][-450:]
-            display = ("…" + tail) if len(_narrative_buffer[0]) > 450 else tail
-            narrative_stream_placeholder.markdown(
-                f'<div style="font-size:13px;line-height:1.7;'
-                f'padding:10px 14px;border-radius:8px;border:1px solid rgba(128,128,128,0.2);'
-                f'background:rgba(128,128,128,0.06);">'
-                f'<span style="font-size:11px;opacity:0.55;display:block;margin-bottom:6px;">Generating narrative…</span>'
-                f'{display}</div>',
-                unsafe_allow_html=True,
-            )
-            return
-        if _step_state["current"] and _step_state["current"] != step:
-            _step_state["done"].add(_step_state["current"])
-        _step_state["current"] = step
-        _step_state["subtask"] = subtask
-        stepper_placeholder.markdown(_render_stepper(_step_state), unsafe_allow_html=True)
+    narrative_buf = progress_dict.get("narrative_buffer", "")
+    if narrative_buf:
+        tail = narrative_buf[-450:]
+        display = ("…" + tail) if len(narrative_buf) > 450 else tail
+        st.markdown(
+            f'<div style="font-size:13px;line-height:1.7;'
+            f'padding:10px 14px;border-radius:8px;border:1px solid rgba(128,128,128,0.2);'
+            f'background:rgba(128,128,128,0.06);">'
+            f'<span style="font-size:11px;opacity:0.55;display:block;margin-bottom:6px;">Generating narrative…</span>'
+            f'{display}</div>',
+            unsafe_allow_html=True,
+        )
 
-    state = facade.run(query_input.strip(), on_progress=_on_progress)
-
-    _step_state["done"] = {s[0] for s in _STEPS}
-    _step_state["current"] = None
-    stepper_placeholder.empty()
-    narrative_stream_placeholder.empty()
-
-    st.session_state["result"] = state
-    st.session_state["last_query"] = query_input.strip()
-    st.session_state.pop("vector_narrative", None)  # clear stale narrative from previous query
+    if thread and thread.is_alive():
+        time.sleep(0.35)
+        st.rerun()
+    else:
+        result_holder = st.session_state.get("_pipeline_result_holder", {})
+        status = result_holder.get("status")
+        if status == "done":
+            st.session_state["result"] = result_holder["result"]
+            st.session_state["last_query"] = st.session_state.get("_running_query", "")
+            st.session_state.pop("vector_narrative", None)
+        elif status == "cancelled":
+            st.session_state.pop("result", None)
+            st.session_state["_pipeline_cancelled"] = True
+        else:
+            err = result_holder.get("error", "Unknown error")
+            st.session_state["result"] = {"error": True, "narrative": f"Pipeline error: {err}"}
+        st.session_state["_pipeline_status"] = "idle"
+        st.rerun()
+    st.stop()
 
 result: dict | None = st.session_state.get("result")
 
 if result is None:
-    st.info("Enter a route query above, then click **Find Scenic Stops** to begin.")
+    if st.session_state.get("_pipeline_cancelled"):
+        del st.session_state["_pipeline_cancelled"]
+        st.info("⛔ Route query was cancelled.")
+    else:
+        st.info("Enter a route query above, then click **Find Scenic Stops** to begin.")
     st.stop()
 
 # ── Error path ────────────────────────────────────────────────────────────────

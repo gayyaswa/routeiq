@@ -2,8 +2,7 @@
 
 > Scenic route intelligence: ask a natural-language question, get a map with curated stops and a Claude-generated narrative — powered by Graph RAG over OSM road networks and Wikipedia.
 
-<!-- Run /generate-demo-gif to produce this -->
-<!-- ![App demo](docs/demo.gif) -->
+![App demo](docs/demo.gif)
 
 ---
 
@@ -158,6 +157,39 @@ graph LR
 
 ---
 
+## LangGraph Pipeline
+
+[routeiq/pipeline.py](routeiq/pipeline.py) implements the four-node state machine using LangGraph's `StateGraph`.
+
+**What LangGraph is:** a typed workflow engine for LLM pipelines. You define nodes (units of work), edges (routing), and one shared `TypedDict` state that every node reads from and writes to. `compile()` turns that definition into a single invokable graph — equivalent to AWS Step Functions but for LLM/tool call chains.
+
+**Graph topology:**
+
+```
+PipelineState (TypedDict — one shared DTO)
+  query · origin · destination · preferences
+  route_result · pois · top_pois · poi_context
+  narrative · error · fallback_reason
+
+parse ──[conditional]──▶ graph ──[conditional]──▶ rag ──▶ narrate ──▶ END
+          ↘ on error                ↘ on error
+           └─────────────────────────────────────▶ narrate (FallbackChain)
+```
+
+**What it adds over plain Python function calls:**
+
+| Plain Python | LangGraph |
+|---|---|
+| Error routing scattered across every caller | Any node sets `state["error"]` → conditional edge auto-routes to fallback |
+| Each function returns a dict; caller merges fields | All nodes share one typed `PipelineState` — no merge boilerplate |
+| Adding a step = refactoring the call chain | Add one node + one edge — existing nodes untouched |
+| Wiring (who calls who) is implicit in call order | Graph topology is explicit and auditable in `_build_graph()` |
+| LangSmith tracing requires manual instrumentation | Drop-in with `LANGCHAIN_TRACING_V2=true` |
+
+**Tradeoff:** For a strictly linear pipeline, LangGraph is slightly more ceremony than chaining functions. The payoff is in the conditional edges and extensibility — adding a caching node, a retry loop, or a human-review gate between any two steps is one `add_node` + one `add_edge` call.
+
+---
+
 ## Testing
 
 ```bash
@@ -256,7 +288,7 @@ eval/
   eval_queries.py         Bay Area query set
   run_eval.py             CLI runner
 tests/                    124 unit tests
-docs/                     Session handoffs, architecture decisions, learnings log
+docs/                     Architecture decisions, learnings log
 prompts.md                Running log of all prompts used in development
 requirements.txt          Python dependencies
 restart.sh                Cache-safe restart (preserves graph + POI cache)
@@ -271,8 +303,6 @@ restart.sh                Cache-safe restart (preserves graph + POI cache)
 | [docs/learnings.md](docs/learnings.md) | Key learnings across all sessions — graph retrieval vs. vector, performance wins, design decisions |
 | [docs/Architecture-and-Design-Decisions.md](docs/Architecture-and-Design-Decisions.md) | Full architecture rationale and design choices |
 | [docs/RAG-and-GraphRAG-Explained.md](docs/RAG-and-GraphRAG-Explained.md) | Plain-English explanation of the GraphRAG approach |
-| [docs/plan-master.md](docs/plan-master.md) | Day-by-day implementation plan |
-| [docs/handoff-session-10.md](docs/handoff-session-10.md) | Latest session handoff — performance overhaul details |
 | [prompts.md](prompts.md) | Every prompt iteration with what changed and why |
 
 ---
