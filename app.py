@@ -117,8 +117,8 @@ def _render_stepper(state: dict) -> str:
 # Pre-warm the 4 Day-5 demo route corridors so the OSM graphs are cached before
 # the first user query. Each bbox covers origin→destination + 0.1° padding.
 _DEMO_BBOXES = [
-    dict(north=38.00, south=37.67, east=-122.32, west=-122.63),  # SF → Muir Woods (Golden Gate, Marin Headlands, redwoods)
-    dict(north=38.5, south=37.6, east=-122.1, west=-122.6),  # SF → Napa
+    dict(north=37.996, south=37.688, east=-122.308, west=-122.680),  # SF → Muir Woods (Golden Gate, Marin Headlands, redwoods)
+    dict(north=38.590, south=37.688, east=-122.222, west=-122.508),  # SF → Napa
     dict(north=37.5, south=36.8, east=-121.7, west=-122.2),  # SJ → Santa Cruz
     dict(north=37.9, south=37.3, east=-122.2, west=-122.6),  # SF → Half Moon Bay
     dict(north=37.96, south=37.67, east=-122.32, west=-122.58),  # SF → Sausalito (Golden Gate Bridge)
