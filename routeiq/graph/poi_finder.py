@@ -9,7 +9,7 @@ import pandas as pd
 import osmnx as ox
 from shapely.geometry import LineString, Point
 from routeiq.graph.poi import POI
-from routeiq.graph.graph_loader import _OVERPASS_MIRRORS
+from routeiq.graph.graph_loader import _OVERPASS_ENDPOINTS
 
 _PER_MIRROR_TIMEOUT = 30  # hard wall-clock limit per Overpass attempt, independent of OSMnx retry logic
 
@@ -119,10 +119,10 @@ class POIFinder:
     def _query_overpass(self, buffer_poly, cache_path: str, progress_fn, t0: float) -> list[POI]:
         minx, miny, maxx, maxy = buffer_poly.bounds
         print(f"[timing]     poi cache MISS — querying Overpass", flush=True)
-        n_mirrors = len(_OVERPASS_MIRRORS)
+        n_mirrors = len(_OVERPASS_ENDPOINTS)
         gdf = None
 
-        for idx, mirror in enumerate(_OVERPASS_MIRRORS, 1):
+        for idx, mirror in enumerate(_OVERPASS_ENDPOINTS, 1):
             if progress_fn:
                 progress_fn(f"Querying POI server {idx}/{n_mirrors}…")
             t1 = time.perf_counter()

@@ -7,6 +7,11 @@ chroma_db/
 *.cache
 osm_cache/
 cache/graphs/
+# Demo route graphs committed for zero cold-start on clone
+!cache/graphs/n38.000_s37.670_e-122.320_w-122.630.pkl
+!cache/graphs/n38.500_s37.600_e-122.100_w-122.600.pkl
+!cache/graphs/n37.500_s36.800_e-121.700_w-122.200.pkl
+!cache/graphs/n37.900_s37.300_e-122.200_w-122.600.pkl
 # cache/chroma/ is intentionally NOT ignored — pre-populated for zero cold-start on first demo run
 cache/osmnx/
 cache/*.json

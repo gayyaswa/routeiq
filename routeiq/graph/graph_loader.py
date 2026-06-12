@@ -2,19 +2,36 @@ from __future__ import annotations
 import os
 import pickle
 import re
+import socket as _socket
 import osmnx as ox
 import networkx as nx
+
+# OSMnx v2 pins Overpass connections to the IP returned by socket.gethostbyname,
+# which is IPv4-only. Overpass servers refuse HTTPS on IPv4 but accept IPv6.
+# Patch gethostbyname to prefer IPv6 so OSMnx pins to an address that actually works.
+_real_gethostbyname = _socket.gethostbyname
+
+def _gethostbyname_prefer_ipv6(hostname: str) -> str:
+    try:
+        results = _socket.getaddrinfo(hostname, None, _socket.AF_INET6)
+        if results:
+            return results[0][4][0]
+    except _socket.gaierror:
+        pass
+    return _real_gethostbyname(hostname)
+
+_socket.gethostbyname = _gethostbyname_prefer_ipv6
 
 # Matches both .pkl (fast) and .graphml (legacy) cache files
 _BBOX_RE = re.compile(
     r"n(-?[\d.]+)_s(-?[\d.]+)_e(-?[\d.]+)_w(-?[\d.]+)\.(graphml|pkl)$"
 )
 
-_OVERPASS_MIRRORS = [
-    "https://lz4.overpass-api.de/api",
-    "https://z.overpass-api.de/api",
-    "https://overpass.openstreetmap.ru/api",
-    "https://overpass.kumi.systems/api",
+_OVERPASS_ENDPOINTS = [
+    "https://overpass-api.de/api",          # primary
+    "https://lz4.overpass-api.de/api",      # mirror
+    "https://z.overpass-api.de/api",        # mirror
+    "https://overpass.openstreetmap.ru/api", # mirror
 ]
 
 
@@ -63,7 +80,7 @@ class GraphLoader:
             return G
 
         last_err: Exception | None = None
-        for mirror in _OVERPASS_MIRRORS:
+        for mirror in _OVERPASS_ENDPOINTS:
             try:
                 ox.settings.overpass_url = mirror
                 G = ox.graph_from_bbox(bbox=(west, south, east, north), network_type=network_type)
