@@ -105,6 +105,9 @@ class GraphLoader:
         self, north: float, south: float, east: float, west: float
     ) -> str | None:
         """Return path of a cached graph whose bbox fully contains the requested bbox. Prefers .pkl over .graphml."""
+        # 0.02° tolerance absorbs geocoding variance (~2 km) so repeated queries
+        # for the same route don't miss the cache due to non-deterministic results.
+        _EPS = 0.02
         best_pkl: str | None = None
         best_graphml: str | None = None
         for fname in os.listdir(self._cache_dir):
@@ -112,7 +115,7 @@ class GraphLoader:
             if not m:
                 continue
             cn, cs, ce, cw = (float(x) for x in m.groups()[:4])
-            if cn >= north and cs <= south and ce >= east and cw <= west:
+            if cn >= north - _EPS and cs <= south + _EPS and ce >= east - _EPS and cw <= west + _EPS:
                 path = os.path.join(self._cache_dir, fname)
                 if fname.endswith(".pkl"):
                     best_pkl = path
