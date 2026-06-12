@@ -8,7 +8,15 @@ FEW_SHOT_EXAMPLES = [
         "output": '{"origin": "Houston, TX", "destination": "Austin, TX", "preferences": ["natural", "parks"]}',
     },
     {
-        "query": "Get me from Dallas to Fort Worth",
-        "output": '{"origin": "Dallas, TX", "destination": "Fort Worth, TX", "preferences": []}',
+        "query": "Drive from San Francisco to Muir Woods, show redwoods and coastal views",
+        "output": '{"origin": "San Francisco, CA", "destination": "Muir Woods, CA", "preferences": ["redwoods", "coastal"]}',
+    },
+    {
+        "query": "Drive from San Jose to Santa Cruz, show redwoods and beaches",
+        "output": '{"origin": "San Jose, CA", "destination": "Santa Cruz, CA", "preferences": ["redwoods", "beaches"]}',
+    },
+    {
+        "query": "Road trip from San Francisco to Napa Valley, show wineries and historic towns",
+        "output": '{"origin": "San Francisco, CA", "destination": "Napa, CA", "preferences": ["wineries", "historic"]}',
     },
 ]

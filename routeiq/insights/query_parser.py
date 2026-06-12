@@ -16,9 +16,15 @@ class QueryParser:
 
     def parse(self, query: str) -> dict:
         raw = self._chain.invoke({"examples": self._examples, "query": query})
+        # Strip <think>...</think> blocks emitted by reasoning models (e.g. Qwen3)
+        raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL)
         # Strip markdown code fences that some model versions wrap JSON in
         raw = re.sub(r"^```(?:json)?\s*", "", raw.strip())
         raw = re.sub(r"\s*```$", "", raw.strip())
+        # Extract the outermost {...} in case the model adds preamble or orphaned strings
+        m = re.search(r"\{.*\}", raw, flags=re.DOTALL)
+        if m:
+            raw = m.group(0)
         try:
             result = json.loads(raw)
         except json.JSONDecodeError as e:

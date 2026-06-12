@@ -112,7 +112,7 @@ class RoutePipeline:
 
     def _parse_node(self, state: PipelineState) -> dict:
         t0 = time.perf_counter()
-        self._progress("parse", "Sending query to Claude…")
+        self._progress("parse", "Sending query to LLM…")
         result = self._query_parser.parse(state["query"])
         print(f"[timing] parse node: {time.perf_counter()-t0:.2f}s", flush=True)
         if "_parse_error" in result:
@@ -315,7 +315,7 @@ class RoutePipeline:
 
     def _narrate_node(self, state: PipelineState) -> dict:
         t0 = time.perf_counter()
-        self._progress("narrate", "Generating route narrative with Claude…")
+        self._progress("narrate", "Generating route narrative…")
         if state.get("error"):
             narrative = self._fallback_chain.generate(
                 reason=state.get("fallback_reason", state["error"]),

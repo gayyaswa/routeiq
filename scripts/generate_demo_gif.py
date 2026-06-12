@@ -107,7 +107,10 @@ def _record() -> None:
             print("  ✅ Background init complete")
         except Exception:
             print("  NOTE: bg-init banner gone or timed out, continuing")
-        page.wait_for_timeout(1500)
+        # Extra wait for pre-warm thread (_load_heavy) to finish LLM + ChromaDB init
+        print("  Waiting for pre-warm (LLM + ChromaDB)…")
+        page.wait_for_timeout(15_000)
+        print("  ✅ Pre-warm wait complete")
 
         # ── Frame 2: hint buttons ready ───────────────────────────────────
         snap(page, 3000)
@@ -150,8 +153,11 @@ def _record() -> None:
         for tick in range(100):  # up to 300 s at 3 s intervals
             page.wait_for_timeout(3000)
 
-            # Reliable result detection: Folium map renders inside an <iframe>
-            result_done = page.locator("iframe").count() > 0
+            # Result detection: iframe (Folium map / stop cards) OR narrative expander text
+            result_done = (
+                page.locator("iframe").count() > 0
+                or page.locator("text=Route narrative").count() > 0
+            )
 
             # Detect stepper change
             stepper_html = ""
@@ -193,15 +199,25 @@ def _record() -> None:
             print("  ⚠ Pipeline did not finish within 3 min — capturing current state")
             snap(page, 3000)
 
-        # ── Scroll to mid-page: stop cards visible ────────────────────────
-        page.evaluate("window.scrollTo({top: 350, behavior: 'instant'})")
+        # ── Scroll to route summary + top of map ─────────────────────────
+        page.evaluate("window.scrollTo({top: 400, behavior: 'instant'})")
         page.wait_for_timeout(2000)
         snap(page, 4000)
 
-        # ── Scroll to narrative expander ──────────────────────────────────
-        page.evaluate("window.scrollTo({top: 900, behavior: 'instant'})")
-        page.wait_for_timeout(2500)
+        # ── Scroll to show Folium map fully ──────────────────────────────
+        page.evaluate("window.scrollTo({top: 700, behavior: 'instant'})")
+        page.wait_for_timeout(2000)
         snap(page, 5000)
+
+        # ── Scroll to stop cards ──────────────────────────────────────────
+        page.evaluate("window.scrollTo({top: 1100, behavior: 'instant'})")
+        page.wait_for_timeout(2000)
+        snap(page, 5000)
+
+        # ── Scroll to narrative expander ──────────────────────────────────
+        page.evaluate("window.scrollTo({top: 1700, behavior: 'instant'})")
+        page.wait_for_timeout(2500)
+        snap(page, 6000)
 
         browser.close()
 

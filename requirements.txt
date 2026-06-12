@@ -3,6 +3,7 @@ networkx
 scikit-learn
 chromadb
 langchain-anthropic
+langchain-openai
 langchain-core
 langchain-community
 langgraph

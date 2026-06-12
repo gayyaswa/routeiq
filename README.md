@@ -1,6 +1,6 @@
 # RouteIQ
 
-> Scenic route intelligence: ask a natural-language question, get a map with curated stops and a Claude-generated narrative — powered by Graph RAG over OSM road networks and Wikipedia.
+> Scenic route intelligence: ask a natural-language question, get a map with curated stops and an LLM-generated narrative — powered by Graph RAG over OSM road networks and Wikipedia. Swap the LLM provider with a single env var — no code changes required.
 
 ![App demo](docs/demo.gif)
 
@@ -12,23 +12,65 @@
 git clone <repo-url>
 cd routeiq
 pip install -r requirements.txt
-echo "ANTHROPIC_API_KEY=sk-ant-..." > .env
+cp .env.example .env          # edit with your API key
 streamlit run app.py
 ```
 
-**Required environment variable:**
+**Required environment variables** (set in `.env`):
 
-| Variable | Description |
-|---|---|
-| `ANTHROPIC_API_KEY` | Anthropic API key — used for query parsing and narrative generation |
+| Variable | Default | Description |
+|---|---|---|
+| `LLM_PROVIDER` | `anthropic` | `anthropic` or `nebius` |
+| `LLM_MODEL` | `claude-sonnet-4-6` | Model name for the chosen provider |
+| `ANTHROPIC_API_KEY` | — | Required when `LLM_PROVIDER=anthropic` |
+| `NEBIUS_API_KEY` | — | Required when `LLM_PROVIDER=nebius` |
 
 > **First query:** ~30–60 s while OSMnx downloads the road network for the corridor and Overpass fetches POIs. Both are cached to `cache/` — subsequent queries for the same corridor take ~5 s.
 
 ---
 
+## Model Configuration
+
+All LangChain chains accept `BaseLanguageModel` — swapping providers requires only `.env` changes, no code changes. The active model is shown in the app caption on startup.
+
+Two models were tested and verified end-to-end:
+
+---
+
+### ✅ Claude Sonnet 4.6 (Anthropic) — default
+
+```bash
+# .env
+LLM_PROVIDER=anthropic
+LLM_MODEL=claude-sonnet-4-6
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+Get your key at [console.anthropic.com](https://console.anthropic.com).
+
+---
+
+### ✅ GPT-OSS 120B Fast (Nebius Token Factory)
+
+```bash
+# .env
+LLM_PROVIDER=nebius
+LLM_MODEL=openai/gpt-oss-120b-fast
+NEBIUS_API_KEY=v1....
+NEBIUS_API_BASE=https://api.tokenfactory.nebius.com/v1/
+```
+
+Get your key at [tokenfactory.nebius.com](https://tokenfactory.nebius.com). New accounts receive free credits. Other models (Qwen3, DeepSeek, Llama) also work — set `LLM_MODEL` to the model ID shown in your dashboard.
+
+---
+
+The factory lives in [routeiq/llm_factory.py](routeiq/llm_factory.py). To add another OpenAI-compatible provider, add a branch there — no other files need to change.
+
+---
+
 ## What it does
 
-RouteIQ answers natural-language scenic route questions like *"Drive from San Francisco to Muir Woods, show redwoods and coastal views."* It loads the real road network from OpenStreetMap, finds the A\* shortest path, spatially joins points of interest within a 5 km corridor buffer, enriches them with Wikipedia descriptions, and runs a 3-stage Graph RAG pipeline (vector search → knowledge graph augmentation → context assembly) before asking Claude to generate a streaming narrative. The result is an interactive Folium map with animated route, colour-coded stop markers, stop cards with Wikipedia images, and side-by-side GraphRAG vs. vector-only comparison.
+RouteIQ answers natural-language scenic route questions like *"Drive from San Francisco to Muir Woods, show redwoods and coastal views."* It loads the real road network from OpenStreetMap, finds the A\* shortest path, spatially joins points of interest within a 5 km corridor buffer, enriches them with Wikipedia descriptions, and runs a 3-stage Graph RAG pipeline (vector search → knowledge graph augmentation → context assembly) before asking an LLM to generate a streaming narrative. The result is an interactive Folium map with animated route, colour-coded stop markers, stop cards with Wikipedia images, and side-by-side GraphRAG vs. vector-only comparison.
 
 ---
 

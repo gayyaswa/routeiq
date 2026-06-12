@@ -20,7 +20,6 @@ from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
-from langchain_anthropic import ChatAnthropic
 
 load_dotenv()
 
@@ -106,16 +105,17 @@ Requires: `ANTHROPIC_API_KEY`, ~10-15 min, ~$0.05-0.10 API cost.
 
 
 def main() -> None:
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    if not api_key:
-        print("ERROR: ANTHROPIC_API_KEY not set. Export it before running eval.")
-        sys.exit(1)
+    from routeiq.llm_factory import create_llm
 
     print("RouteIQ Evaluation — GraphRAG vs Vector Baseline")
     print(f"10 Bay Area queries · {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print("=" * 70)
 
-    llm = ChatAnthropic(model="claude-sonnet-4-6", api_key=api_key)
+    try:
+        llm = create_llm()
+    except ValueError as exc:
+        print(f"ERROR: {exc}")
+        sys.exit(1)
     indexer = POIIndexer()
     facade = RouteIQFacade(llm, poi_indexer=indexer)
     evaluator = Evaluator(facade, indexer)
