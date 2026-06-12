@@ -25,7 +25,7 @@ streamlit run app.py
 | `ANTHROPIC_API_KEY` | — | Required when `LLM_PROVIDER=anthropic` |
 | `NEBIUS_API_KEY` | — | Required when `LLM_PROVIDER=nebius` |
 
-> **Demo routes load instantly** — road network graphs for all 5 demo corridors are bundled in the repo. Custom routes outside those corridors trigger a one-time OSMnx download (~30–60 s), after which they are cached locally.
+> **Demo routes load instantly** — road network graphs and POI data for all 5 Bay Area demo corridors are bundled in the repo. Custom routes **inside the Bay Area** trigger a one-time OSMnx graph download (~30–60 s) and fast in-memory POI lookup. Routes **outside the Bay Area** (e.g. LA, Phoenix) must fetch both the road network and POIs live from Overpass (~1–4 min first run, then cached locally). See [Pre-seeding POI Cache for New Regions](#pre-seeding-poi-cache-for-new-regions) to avoid this delay.
 
 ---
 
@@ -287,6 +287,90 @@ python3 scripts/seed_poi_cache.py --tiles   # full 4-tile Overpass fetch (~3-5 m
 
 **Latest results:** See [eval/results.md](eval/results.md) — GraphRAG wins 6/6 route queries,
 vector wins 4/4 semantic queries, 10/10 prediction accuracy.
+
+---
+
+## Pre-seeding POI Cache for New Regions
+
+### Why out-of-area routes are slow
+
+Every query goes through a 3-path POI lookup in [routeiq/graph/poi_finder.py](routeiq/graph/poi_finder.py):
+
+| Path | What it checks | Result for Bay Area | Result for LA / Phoenix / etc. |
+|---|---|---|---|
+| 1 — master file | `cache/pois/bay_area_all.json.gz` — 984 POIs, in-memory spatial filter | Instant (~0.1 s) | 0 hits → falls through |
+| 2 — per-route cache | `cache/pois/pois_n*.json.gz` for this exact bounding box | Instant if previously run | No file → falls through |
+| 3 — live Overpass | 4 mirrors × 30 s timeout each | Never reached | Up to **120 s** before error |
+
+Additionally, the road network graph (OSMnx) is also fetched live for uncached regions on the same first run. For a dense urban area like Hollywood → Beverly Hills, Overpass must scan a large bounding box with thousands of features — compounding the delay.
+
+**After the first successful run**, the per-route cache file is written to `cache/pois/` automatically. Subsequent queries for the same corridor are instant.
+
+---
+
+### Option 1 — Let it auto-cache on first run (simplest)
+
+Just run the query. It will be slow the first time (~1–4 min depending on Overpass load), then instant on every subsequent run. The cache file is written to `cache/pois/pois_n<bbox>.json.gz` automatically.
+
+To share that cache with others, commit the file:
+
+```bash
+git add cache/pois/pois_n<bbox>.json.gz
+git commit -m "chore: add POI cache for <region> corridor"
+```
+
+---
+
+### Option 2 — Extend the seed script for a new region
+
+For broader coverage (any route within a region, not just one corridor), adapt `scripts/seed_poi_cache.py` to fetch a new set of geographic tiles:
+
+**Step 1 — Identify your bounding box**
+
+Use [bboxfinder.com](https://bboxfinder.com) to draw a box around the region, then note `west, south, east, north`.
+
+**Step 2 — Edit the tile list in the script**
+
+```python
+# scripts/seed_poi_cache.py — _BAY_AREA_TILES equivalent for your region
+_LA_TILES = [
+    # (name,               west,     south,   east,    north)
+    ("LA Basin + Hollywood", -118.55,  33.90, -118.10,  34.20),
+    ("Beverly Hills + Malibu", -118.70, 33.95, -118.35, 34.15),
+]
+```
+
+Each tile should be small enough to finish in under 90 s on Overpass (roughly 0.5° × 0.5° for dense urban areas, larger for rural).
+
+**Step 3 — Run the tile fetch**
+
+```bash
+python3 scripts/seed_poi_cache.py --tiles
+```
+
+This queries Overpass for each tile (3–5 min total), deduplicates by OSM ID, and writes the master file.
+
+**Step 4 — Update POIFinder to recognise the new master file**
+
+In [routeiq/graph/poi_finder.py](routeiq/graph/poi_finder.py), `_MASTER_FILE` is currently hardcoded to `bay_area_all.json.gz`. For multi-region support, you would either:
+- Maintain one large master file covering all regions (merge the files)
+- Or add a second master path and a geographic check before falling through to Overpass
+
+**Step 5 — Commit the cache**
+
+```bash
+git add cache/pois/<region>_all.json.gz
+git commit -m "chore: add POI master cache for <region>"
+```
+
+---
+
+### Current coverage
+
+| Region | Master cache file | Routes covered |
+|---|---|---|
+| Bay Area | `cache/pois/bay_area_all.json.gz` | All 5 demo routes + any Bay Area corridor |
+| All others | Per-route `cache/pois/pois_n*.json.gz` (auto-generated, not committed) | Only previously run corridors |
 
 ---
 
