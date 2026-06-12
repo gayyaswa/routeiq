@@ -17,6 +17,24 @@ from routeiq.rag import WikipediaFetcher, POIIndexer, POIRetriever, POIChunker, 
 _ROUTE_TOO_LONG_MIN = 360.0  # 6 hours
 
 
+def _resolve_categories(preferences: list[str], collection) -> list[str]:
+    """Map NL preference keywords to OSM categories via semantic search.
+
+    Queries the POI vector DB with each preference string and extracts the
+    distinct category values from the top-5 results. Falls back to the raw
+    preference list when the collection is unavailable or returns nothing.
+    """
+    if not preferences or collection is None:
+        return preferences
+    try:
+        results = collection.query(query_texts=preferences, n_results=5)
+        categories = [m["category"] for metas in results["metadatas"] for m in metas]
+        resolved = list(dict.fromkeys(categories))  # deduplicate, preserve order
+        return resolved if resolved else preferences
+    except Exception:
+        return preferences
+
+
 class PipelineState(TypedDict):
     query: str
     origin: Optional[str]
@@ -227,7 +245,10 @@ class RoutePipeline:
         t1 = time.perf_counter()
         self._progress("graph", f"Scoring {len(pois)} POIs by detour cost…")
         scored = self._detour_scorer.score(pois, route_result.route_coords)
-        top_pois = self._poi_selector.select(scored, preferences=state.get("preferences") or [])
+        raw_prefs = state.get("preferences") or []
+        collection = self._poi_indexer.collection if self._poi_indexer else None
+        resolved = _resolve_categories(raw_prefs, collection)
+        top_pois = self._poi_selector.select(scored, preferences=resolved)
         print(f"[timing]   score+select: {time.perf_counter()-t1:.2f}s → {len(top_pois)} top POIs", flush=True)
         print(f"[timing] graph node total: {time.perf_counter()-t0:.2f}s", flush=True)
         self._progress("graph", f"Selected {len(top_pois)} scenic stops")
