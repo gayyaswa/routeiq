@@ -1,10 +1,14 @@
-osmnx
+osmnx>=2.0
 networkx
+scikit-learn
 chromadb
 langchain-anthropic
+langchain-openai
 langchain-core
 langchain-community
+langgraph
 folium
+streamlit
 streamlit-folium
 wikipedia
 geopandas
