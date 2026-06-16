@@ -1,9 +1,13 @@
 """NetworkX knowledge graph: POI/City/Region/Category nodes with typed edges (Registry pattern)."""
 from __future__ import annotations
+import dataclasses
 import math
 from typing import Any
 import networkx as nx
 from routeiq.graph.knowledge_graph_data import POIS, CITIES, REGIONS, CATEGORIES, RELATIONSHIPS
+from routeiq.graph.poi import POI
+
+_POI_FIELDS = {f.name for f in dataclasses.fields(POI)}
 
 
 class RouteKnowledgeGraph:
@@ -63,6 +67,44 @@ class RouteKnowledgeGraph:
         """Returns all POI osm_ids in the graph."""
         return [n for n, d in self._g.nodes(data=True) if d.get("type") == "POI"]
 
+    def known_cities(self) -> set[str]:
+        """Returns the set of city names currently in the graph."""
+        return {d["name"] for n, d in self._g.nodes(data=True) if d.get("type") == "City"}
+
+    def get_pois_for_city(self, city_name: str) -> list[POI]:
+        """Returns POI objects whose LOCATED_IN edge points to city_name.
+
+        Normalises input — strips state suffix so "San Francisco, CA" matches "San Francisco".
+        """
+        short = city_name.split(",")[0].strip()
+        result = []
+        for node_id, data in self._g.nodes(data=True):
+            if data.get("type") != "POI":
+                continue
+            city = self._city_for_poi(node_id)
+            if city == short:
+                result.append(POI(**{k: v for k, v in data.items() if k in _POI_FIELDS}))
+        return result
+
+    def add_city_pois(
+        self,
+        city_name: str,
+        city_lat: float,
+        city_lon: float,
+        pois: list[POI],
+    ) -> None:
+        """Add a new city node + its POIs to the in-memory graph.
+
+        Safe to call multiple times for the same city — existing nodes are not duplicated.
+        """
+        if city_name not in self._g:
+            self._g.add_node(city_name, type="City", name=city_name, lat=city_lat, lon=city_lon)
+        for poi in pois:
+            if poi.osm_id not in self._g:
+                self._g.add_node(poi.osm_id, type="POI", **dataclasses.asdict(poi))
+                self._g.add_edge(poi.osm_id, city_name, rel="LOCATED_IN")
+        self._add_near_poi_edges_for(pois)
+
     def node_count(self) -> int:
         return self._g.number_of_nodes()
 
@@ -89,6 +131,15 @@ class RouteKnowledgeGraph:
                 if dist <= self._NEAR_POI_MAX_KM:
                     self._g.add_edge(id_a, id_b, rel="NEAR_POI", dist_km=round(dist, 1))
                     self._g.add_edge(id_b, id_a, rel="NEAR_POI", dist_km=round(dist, 1))
+
+    def _add_near_poi_edges_for(self, pois: list[POI]) -> None:
+        """Compute NEAR_POI edges only among the supplied POIs (used for dynamic city additions)."""
+        for i, poi_a in enumerate(pois):
+            for poi_b in pois[i + 1:]:
+                dist = self._haversine(poi_a.lat, poi_a.lon, poi_b.lat, poi_b.lon)
+                if dist <= self._NEAR_POI_MAX_KM:
+                    self._g.add_edge(poi_a.osm_id, poi_b.osm_id, rel="NEAR_POI", dist_km=round(dist, 1))
+                    self._g.add_edge(poi_b.osm_id, poi_a.osm_id, rel="NEAR_POI", dist_km=round(dist, 1))
 
     def _city_for_poi(self, osm_id: str) -> str | None:
         return self._first_neighbor(osm_id, "LOCATED_IN")
