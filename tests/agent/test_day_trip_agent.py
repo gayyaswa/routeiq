@@ -88,7 +88,7 @@ class TestInterruptFires:
         graph = build_day_trip_graph()
         config = {"configurable": {"thread_id": str(uuid.uuid4())}}
 
-        with patch("routeiq.agent.day_trip_agent._make_llm", return_value=_mock_llm()):
+        with patch("routeiq.agent.day_trip_agent.create_llm", return_value=_mock_llm()):
             # Consume the stream to drive the graph to the interrupt point
             for _ in graph.stream(_initial_state(), config=config):
                 pass
@@ -105,7 +105,7 @@ class TestResumeApproved:
         graph = build_day_trip_graph()
         config = {"configurable": {"thread_id": str(uuid.uuid4())}}
 
-        with patch("routeiq.agent.day_trip_agent._make_llm", return_value=_mock_llm()):
+        with patch("routeiq.agent.day_trip_agent.create_llm", return_value=_mock_llm()):
             # Drive to interrupt
             for _ in graph.stream(_initial_state(), config=config):
                 pass
@@ -135,7 +135,7 @@ class TestResumeRefine:
             second_itinerary,         # second plan pass after refine
         ]
 
-        with patch("routeiq.agent.day_trip_agent._make_llm", return_value=mock):
+        with patch("routeiq.agent.day_trip_agent.create_llm", return_value=mock):
             # Drive to interrupt
             for _ in graph.stream(_initial_state(), config=config):
                 pass

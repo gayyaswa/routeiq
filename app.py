@@ -76,14 +76,22 @@ _STEPS = [
     ("narrate", "Generating narrative",                "✍️"),
 ]
 
+_DT_STEPS = [
+    ("find_pois", "Discovering city POIs",  "🏙️"),
+    ("rate_pois", "Rating stops",           "⭐"),
+    ("extract",   "Finalizing itinerary",   "📋"),
+]
 
-def _render_stepper(state: dict) -> str:
+
+def _render_stepper(state: dict, steps=None) -> str:
+    if steps is None:
+        steps = _STEPS
     current = state.get("current")
     done = state.get("done", set())
     subtask = state.get("subtask", "")
 
     rows = [_STEPPER_CSS, '<div class="riq-stepper">']
-    for i, (step_id, label, icon) in enumerate(_STEPS):
+    for i, (step_id, label, icon) in enumerate(steps):
         if step_id in done:
             icon_cls, label_cls, display_icon = "", "riq-done", "✅"
         elif step_id == current:
@@ -106,7 +114,7 @@ def _render_stepper(state: dict) -> str:
                     "Once downloaded, the graph is cached locally — same route is instant next time."
                     "</div>"
                 )
-        if i < len(_STEPS) - 1:
+        if i < len(steps) - 1:
             rows.append('<div class="riq-connector"></div>')
 
     rows.append('</div>')
@@ -472,7 +480,12 @@ with tab1:
         st.session_state["dt_start_val"] = dt_start
 
         rh: dict = {}
+        dt_progress: dict = {"current": None, "done": set(), "subtask": ""}
+        from routeiq.agent.day_trip_agent import register_progress as _dt_register
+        _dt_register(new_thread_id, dt_progress)
         st.session_state["dt_result_holder"] = rh
+        st.session_state["dt_progress"] = dt_progress
+        st.session_state["dt_progress_thread_id"] = new_thread_id
         initial_state = {
             "messages": [],
             "city": dt_city,
@@ -496,12 +509,19 @@ with tab1:
     # ── Planning poll ─────────────────────────────────────────────────────────
 
     if dt_phase == "planning":
-        st.info("🤖 Agent is planning your day trip — calling tools…")
+        dt_progress = st.session_state.get("dt_progress", {})
+        _dt_stepper_ph = st.empty()
+        _dt_stepper_ph.markdown(_render_stepper(dt_progress, steps=_DT_STEPS), unsafe_allow_html=True)
+
         thread = st.session_state.get("dt_thread")
         if thread and thread.is_alive():
             time.sleep(0.5)
             st.rerun()
         else:
+            # Clean up registry entry
+            from routeiq.agent.day_trip_agent import unregister_progress as _dt_unreg
+            _dt_unreg(st.session_state.get("dt_progress_thread_id", ""))
+
             rh = st.session_state.get("dt_result_holder", {})
             if rh.get("status") == "interrupted":
                 _, dt_graph = _load_day_trip_resources()
@@ -563,9 +583,15 @@ with tab1:
                 )
                 if st.button("🔄 Refine", key="dt_refine") and feedback_text.strip():
                     _, dt_graph = _load_day_trip_resources()
-                    config = {"configurable": {"thread_id": st.session_state["dt_thread_id"]}}
+                    refine_tid = st.session_state["dt_thread_id"]
+                    config = {"configurable": {"thread_id": refine_tid}}
                     rh3: dict = {}
+                    dt_progress3: dict = {"current": None, "done": set(), "subtask": ""}
+                    from routeiq.agent.day_trip_agent import register_progress as _dt_register3
+                    _dt_register3(refine_tid, dt_progress3)
                     st.session_state["dt_result_holder"] = rh3
+                    st.session_state["dt_progress"] = dt_progress3
+                    st.session_state["dt_progress_thread_id"] = refine_tid
                     st.session_state["dt_phase"] = "planning"
                     t = threading.Thread(
                         target=_run_dt_refine_thread,

@@ -1,8 +1,10 @@
 from __future__ import annotations
+import threading
 import time
 from typing import Any, List, Optional
 
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import START, StateGraph
 from langgraph.types import Command, interrupt
@@ -12,6 +14,49 @@ from routeiq.agent.agent_state import DayTripState
 from routeiq.agent.tools import ALL_TOOLS
 from routeiq.insights.prompts.day_trip_planner import DAY_TRIP_PLANNER_PROMPT
 from routeiq.llm_factory import create_llm
+
+# ── Per-run progress registry (thread-safe) ───────────────────────────────────
+# Maps LangGraph thread_id → shared dict that app.py polls every 0.5s.
+# Structure mirrors Route Planner: {"current": str, "done": set, "subtask": str}
+
+_progress_lock = threading.Lock()
+_progress_registry: dict[str, dict] = {}
+
+# Maps agent tool names → logical stepper step keys
+_TOOL_TO_STEP: dict[str, str] = {
+    "find_city_pois": "find_pois",
+    "enrich_poi_details": "find_pois",
+    "get_travel_time": "find_pois",
+    "estimate_visit_duration": "find_pois",
+    "rate_pois": "rate_pois",
+}
+
+
+def register_progress(thread_id: str, d: dict) -> None:
+    """Register a shared progress dict for a planning run. Called by app.py before thread start."""
+    with _progress_lock:
+        _progress_registry[thread_id] = d
+
+
+def unregister_progress(thread_id: str) -> None:
+    """Remove the progress dict after planning completes."""
+    with _progress_lock:
+        _progress_registry.pop(thread_id, None)
+
+
+def _emit_progress(thread_id: str, step: str, subtask: str = "") -> None:
+    """Advance progress state: marks previous step done, sets new current step."""
+    with _progress_lock:
+        d = _progress_registry.get(thread_id)
+    if d is None:
+        return
+    current = d.get("current")
+    if current and current != step:
+        done: set = set(d.get("done") or set())
+        done.add(current)
+        d["done"] = done
+    d["current"] = step
+    d["subtask"] = subtask
 
 # ── Output schemas ────────────────────────────────────────────────────────────
 
@@ -69,9 +114,10 @@ def _execute_tool(tool_call: dict[str, Any]) -> ToolMessage:
 
 # ── Graph nodes ───────────────────────────────────────────────────────────────
 
-def _plan(state: DayTripState) -> dict:
+def _plan(state: DayTripState, config: Optional[RunnableConfig] = None) -> dict:
     """ReAct tool loop, then a structured-output call to extract the validated itinerary."""
     t0 = time.perf_counter()
+    thread_id: str = ((config or {}).get("configurable") or {}).get("thread_id", "")
     print(f"[dt_agent] _plan start city={state['city']}", flush=True)
     llm = create_llm()
     llm_with_tools = llm.bind_tools(ALL_TOOLS)
@@ -100,11 +146,21 @@ def _plan(state: DayTripState) -> dict:
 
         tool_names = [tc["name"] for tc in response.tool_calls]
         print(f"[dt_agent] ReAct loop: iter={iteration} tools={tool_names}", flush=True)
+
+        # Emit progress for the first tool in each iteration
+        if thread_id and tool_names:
+            step = _TOOL_TO_STEP.get(tool_names[0], "find_pois")
+            label = tool_names[0].replace("_", " ")
+            _emit_progress(thread_id, step, label)
+
         for tc in response.tool_calls:
             messages.append(_execute_tool(tc))
 
     # Phase 2 — Structured extraction: the full conversation becomes context for a
     # validated Pydantic parse. This guarantees all fields are present and typed correctly.
+    if thread_id:
+        _emit_progress(thread_id, "extract", "Structuring itinerary…")
+
     structured_llm = llm.with_structured_output(DayTripItinerary)
     extraction_prompt = (
         "Based on all the tool results above, produce the final day trip itinerary "
