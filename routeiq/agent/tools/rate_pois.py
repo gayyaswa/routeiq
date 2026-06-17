@@ -58,6 +58,9 @@ def rate_pois(city: str, poi_list_json: str) -> str:
         entry["rating"] = rp.rating
         entry["review_count"] = rp.review_count
         entry["review_snippet"] = rp.review_snippet
+        entry["all_snippets"] = rp.all_snippets or []
+        entry["review_source"] = rp.review_source
+        entry["photo_urls"] = rp.photo_urls or []
         entry["hours"] = rp.hours
         entry["composite_score"] = round(
             _composite_score(rp.rating, rp.review_count, bool(rp.poi.wikipedia_tag)), 4

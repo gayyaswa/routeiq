@@ -37,6 +37,10 @@ def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 class FoursquareRatingProvider(POIRatingProvider):
     """Enriches OSM POIs with Foursquare ratings via batch category search + ChromaDB name merge (Strategy pattern)."""
 
+    @property
+    def source_name(self) -> str:
+        return "Foursquare"
+
     def __init__(self, api_key: str, cache_dir: str = _CACHE_DIR):
         self._api_key = api_key
         self._cache_dir = cache_dir
@@ -118,7 +122,8 @@ class FoursquareRatingProvider(POIRatingProvider):
             hours = display
 
         return RatedPOI(poi=poi, rating=rating, review_count=review_count,
-                        review_snippet=snippet, hours=hours)
+                        review_snippet=snippet, all_snippets=[snippet] if snippet else None,
+                        review_source=self.source_name, hours=hours)
 
     def _find_match(self, poi: POI, fs_pool: list[dict[str, Any]], collection: Any) -> dict[str, Any] | None:
         results = collection.query(query_texts=[poi.name], n_results=1)
