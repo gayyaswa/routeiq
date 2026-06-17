@@ -81,7 +81,10 @@ class ItineraryStop(BaseModel):
     rating: Optional[float] = None
     review_count: Optional[int] = None
     review_source: Optional[str] = None
-    photo_urls: List[str] = Field(default_factory=list)
+    photo_urls: List[str] = Field(
+        default_factory=list,
+        description="Copy photo_urls exactly from rate_pois tool results. Do not invent URLs.",
+    )
     image_url: Optional[str] = None
     hours: Optional[str] = None
 
@@ -110,6 +113,137 @@ def _execute_tool(tool_call: dict[str, Any]) -> ToolMessage:
         except Exception as exc:
             result = f"Tool error: {exc}"
     return ToolMessage(content=str(result), tool_call_id=tool_call["id"], name=name)
+
+
+# ── Schedule helpers ─────────────────────────────────────────────────────────
+
+_TRANSITION_OVERHEAD_MIN = 7.0  # parking + walk to entrance, separate from visit_duration_min
+
+
+def _minutes_to_timestr(total: float) -> str:
+    """Convert minutes-since-midnight to '9:00 AM' / '2:30 PM'."""
+    h = int(total // 60) % 24
+    m = int(total % 60)
+    period = "AM" if h < 12 else "PM"
+    display_h = h % 12 or 12
+    return f"{display_h}:{m:02d} {period}"
+
+
+def _timestr_to_minutes(s: str) -> Optional[float]:
+    """Parse '9:00 AM' or '2:30 PM' → minutes since midnight. Returns None on failure."""
+    import re as _re
+    match = _re.match(r"(\d{1,2}):(\d{2})\s*(AM|PM)", s.strip(), _re.IGNORECASE)
+    if not match:
+        return None
+    h, mins, period = int(match.group(1)), int(match.group(2)), match.group(3).upper()
+    if period == "PM" and h != 12:
+        h += 12
+    elif period == "AM" and h == 12:
+        h = 0
+    return float(h * 60 + mins)
+
+
+def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Great-circle distance in km (no external deps)."""
+    import math
+    R = 6371.0
+    d_lat = math.radians(lat2 - lat1)
+    d_lon = math.radians(lon2 - lon1)
+    a = (math.sin(d_lat / 2) ** 2
+         + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(d_lon / 2) ** 2)
+    return R * 2 * math.asin(math.sqrt(a))
+
+
+def _schedule_stops(
+    stops: List[dict],
+    start_time: str,
+    time_budget_hours: float,
+    city: str,
+) -> tuple:
+    """
+    Replace LLM-hallucinated times with real A* road times and trim stops to budget.
+    Returns (updated_stops, route_coords). Falls back to (original_stops, []) on any error.
+    """
+    if not stops:
+        return stops, []
+
+    try:
+        import osmnx as ox  # lazy — project convention
+        from routeiq.graph.graph_loader import GraphLoader
+        from routeiq.graph.route_graph import RouteGraph
+
+        start_min = _timestr_to_minutes(start_time) or 9 * 60.0
+        budget_min = time_budget_hours * 60.0
+
+        # Geocode city → centroid for GraphLoader bbox
+        gdf = ox.geocoder.geocode_to_gdf(city)
+        centroid = gdf.geometry.iloc[0].centroid
+        lat, lon = centroid.y, centroid.x
+
+        G = GraphLoader().load(
+            north=lat + 0.15, south=lat - 0.15,
+            east=lon + 0.15,  west=lon - 0.15,
+        )
+        rg = RouteGraph(G)
+
+        # Nearest-neighbor sort: best composite_score first, then greedy by distance
+        remaining = list(stops)
+        if any("composite_score" in s for s in remaining):
+            first = max(remaining, key=lambda s: s.get("composite_score") or 0.0)
+            remaining.remove(first)
+            sorted_stops: List[dict] = [first]
+            while remaining:
+                last = sorted_stops[-1]
+                nearest = min(
+                    remaining,
+                    key=lambda s: _haversine_km(last["lat"], last["lon"], s["lat"], s["lon"]),
+                )
+                remaining.remove(nearest)
+                sorted_stops.append(nearest)
+        else:
+            sorted_stops = list(stops)
+
+        # Build timeline; leg_coord_slices[0] is empty (no drive before first stop)
+        leg_coord_slices: List[list] = [[]]
+        current_min = start_min
+
+        for i, stop in enumerate(sorted_stops):
+            stop = dict(stop)
+            stop["arrival_time"] = _minutes_to_timestr(current_min)
+            visit_dur = float(stop.get("visit_duration_min") or 60.0)
+            stop["departure_time"] = _minutes_to_timestr(current_min + visit_dur)
+            current_min += visit_dur
+            sorted_stops[i] = stop
+
+            if i + 1 < len(sorted_stops):
+                nxt = sorted_stops[i + 1]
+                try:
+                    result = rg.find_route(stop["lat"], stop["lon"], nxt["lat"], nxt["lon"])
+                    drive_min = result.drive_time_min + _TRANSITION_OVERHEAD_MIN
+                    leg_coord_slices.append(result.route_coords)
+                except Exception:
+                    leg_coord_slices.append([])
+                    drive_min = 15.0
+                current_min += drive_min
+
+        # Trim tail while last stop's departure exceeds budget
+        end_min = start_min + budget_min
+        while len(sorted_stops) > 1:
+            last_dep = _timestr_to_minutes(sorted_stops[-1]["departure_time"])
+            if last_dep is None or last_dep <= end_min:
+                break
+            sorted_stops.pop()
+            if len(leg_coord_slices) > len(sorted_stops):
+                leg_coord_slices.pop()
+
+        all_coords: list = [
+            c for slice_ in leg_coord_slices[: len(sorted_stops)] for c in slice_
+        ]
+        return sorted_stops, all_coords
+
+    except Exception as exc:
+        print(f"[dt_agent] _schedule_stops fallback: {exc}", flush=True)
+        return stops, []
 
 
 # ── Graph nodes ───────────────────────────────────────────────────────────────
@@ -166,14 +300,28 @@ def _plan(state: DayTripState, config: Optional[RunnableConfig] = None) -> dict:
         "Based on all the tool results above, produce the final day trip itinerary "
         "for " + state["city"] + ". Follow all faithfulness rules: visitor_quote from "
         "review snippets, visitor_summary synthesizing visitor sentiment, why_visit from "
-        "Wikipedia only, activities grounded in Wikipedia and reviews."
+        "Wikipedia only, activities grounded in Wikipedia and reviews. "
+        "CRITICAL: copy photo_urls, rating, review_count, review_source, and hours "
+        "EXACTLY from rate_pois tool output — do not invent or modify these values."
     )
     itinerary: DayTripItinerary = structured_llm.invoke(
         messages + [HumanMessage(content=extraction_prompt)]
     )
+    itinerary_dict = itinerary.model_dump()
 
-    print(f"[dt_agent] _plan done in {time.perf_counter()-t0:.1f}s — {len((itinerary.model_dump().get('stops') or []))} stops", flush=True)
-    return {"messages": messages, "draft_itinerary": itinerary.model_dump()}
+    if thread_id:
+        _emit_progress(thread_id, "extract", "Computing real route…")
+
+    scheduled_stops, route_coords = _schedule_stops(
+        itinerary_dict.get("stops") or [],
+        state["start_time"],
+        state["time_budget_hours"],
+        state["city"],
+    )
+    itinerary_dict["stops"] = scheduled_stops
+
+    print(f"[dt_agent] _plan done in {time.perf_counter()-t0:.1f}s — {len(scheduled_stops)} stops", flush=True)
+    return {"messages": messages, "draft_itinerary": itinerary_dict, "route_coords": route_coords}
 
 
 def _review(state: DayTripState) -> Command:

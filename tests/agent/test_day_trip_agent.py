@@ -11,7 +11,11 @@ from routeiq.agent.day_trip_agent import (
     build_day_trip_graph,
     DayTripItinerary,
     ItineraryStop,
+    _schedule_stops,
+    _minutes_to_timestr,
+    _timestr_to_minutes,
 )
+from routeiq.graph.route_result import RouteResult
 from langgraph.types import Command
 
 
@@ -75,6 +79,7 @@ def _initial_state():
         "time_budget_hours": 8.0,
         "start_time": "9:00 AM",
         "draft_itinerary": None,
+        "route_coords": None,
         "approved": False,
         "narrative": None,
     }
@@ -83,6 +88,13 @@ def _initial_state():
 # ── Tests ─────────────────────────────────────────────────────────────────────
 
 class TestInterruptFires:
+    @pytest.fixture(autouse=True)
+    def _no_schedule(self, monkeypatch):
+        monkeypatch.setattr(
+            "routeiq.agent.day_trip_agent._schedule_stops",
+            lambda stops, *_: (stops, []),
+        )
+
     def test_graph_pauses_at_review_node(self):
         """Streaming the initial state must pause at the 'review' interrupt."""
         graph = build_day_trip_graph()
@@ -100,6 +112,13 @@ class TestInterruptFires:
 
 
 class TestResumeApproved:
+    @pytest.fixture(autouse=True)
+    def _no_schedule(self, monkeypatch):
+        monkeypatch.setattr(
+            "routeiq.agent.day_trip_agent._schedule_stops",
+            lambda stops, *_: (stops, []),
+        )
+
     def test_approved_reaches_narrate_and_sets_narrative(self):
         """Resuming with approved=True must run the narrate node and populate narrative."""
         graph = build_day_trip_graph()
@@ -120,6 +139,13 @@ class TestResumeApproved:
 
 
 class TestResumeRefine:
+    @pytest.fixture(autouse=True)
+    def _no_schedule(self, monkeypatch):
+        monkeypatch.setattr(
+            "routeiq.agent.day_trip_agent._schedule_stops",
+            lambda stops, *_: (stops, []),
+        )
+
     def test_refine_loops_back_to_plan(self):
         """Resuming with approved=False must re-enter the plan node and produce a new draft."""
         graph = build_day_trip_graph()
@@ -153,6 +179,111 @@ class TestResumeRefine:
         new_draft = snapshot.values.get("draft_itinerary") or {}
         stop_names = [s["name"] for s in new_draft.get("stops", [])]
         assert "Golden Gate Park" in stop_names
+
+
+class TestScheduleStops:
+    """Unit tests for _schedule_stops() — the deterministic post-processing step."""
+
+    def _make_stops(self, n: int, visit_min: int = 60) -> list[dict]:
+        """Create n fake stop dicts with lat/lon spread and no composite_score."""
+        return [
+            {
+                "name": f"Stop {i}",
+                "category": "tourism",
+                "lat": 37.77 + i * 0.01,
+                "lon": -122.41 + i * 0.01,
+                "visit_duration_min": visit_min,
+                "arrival_time": "TBD",
+                "departure_time": "TBD",
+            }
+            for i in range(n)
+        ]
+
+    def _mock_osmnx_gdf(self):
+        """Mock return value for ox.geocoder.geocode_to_gdf()."""
+        mock_centroid = MagicMock()
+        mock_centroid.y = 37.77
+        mock_centroid.x = -122.41
+        mock_geom = MagicMock()
+        mock_geom.centroid = mock_centroid
+        mock_geometry = MagicMock()
+        mock_geometry.iloc = [mock_geom]
+        mock_gdf = MagicMock()
+        mock_gdf.geometry = mock_geometry
+        return mock_gdf
+
+    def _fake_route_result(self, drive_time_min: float = 8.0) -> RouteResult:
+        return RouteResult(
+            route_nodes=[1, 2, 3],
+            route_coords=[(37.77, -122.41), (37.78, -122.42)],
+            length_km=4.0,
+            drive_time_min=drive_time_min,
+        )
+
+    def test_empty_stops_returns_empty(self):
+        stops, coords = _schedule_stops([], "9:00 AM", 8.0, "San Francisco, CA")
+        assert stops == []
+        assert coords == []
+
+    def test_returns_original_on_geocode_failure(self):
+        stops = self._make_stops(2)
+        with patch("osmnx.geocoder.geocode_to_gdf", side_effect=RuntimeError("network error")):
+            result_stops, coords = _schedule_stops(stops, "9:00 AM", 8.0, "San Francisco, CA")
+        assert result_stops == stops
+        assert coords == []
+
+    def test_returns_original_on_graph_load_failure(self):
+        stops = self._make_stops(2)
+        with patch("osmnx.geocoder.geocode_to_gdf", return_value=self._mock_osmnx_gdf()), \
+             patch("routeiq.graph.graph_loader.GraphLoader") as mock_gl:
+            mock_gl.return_value.load.side_effect = RuntimeError("cache miss")
+            result_stops, coords = _schedule_stops(stops, "9:00 AM", 8.0, "San Francisco, CA")
+        assert result_stops == stops
+        assert coords == []
+
+    def test_first_stop_gets_start_time(self):
+        stops = self._make_stops(2, visit_min=60)
+        fake_result = self._fake_route_result(drive_time_min=8.0)
+        with patch("osmnx.geocoder.geocode_to_gdf", return_value=self._mock_osmnx_gdf()), \
+             patch("routeiq.graph.graph_loader.GraphLoader") as mock_gl, \
+             patch("routeiq.graph.route_graph.RouteGraph") as mock_rg:
+            mock_gl.return_value.load.return_value = MagicMock()
+            mock_rg.return_value.find_route.return_value = fake_result
+            result_stops, _ = _schedule_stops(stops, "9:00 AM", 8.0, "San Francisco, CA")
+        assert result_stops[0]["arrival_time"] == "9:00 AM"
+
+    def test_budget_drops_last_stop(self):
+        # 3 stops × 30min visit + 15min transit (8 drive + 7 overhead).
+        # Stop 3 departs at 11:00 AM; budget=1.5h ends at 10:30 AM → stop 3 trimmed → 2 remain.
+        stops = self._make_stops(3, visit_min=30)
+        fake_result = self._fake_route_result(drive_time_min=8.0)  # +7 overhead = 15 total
+        with patch("osmnx.geocoder.geocode_to_gdf", return_value=self._mock_osmnx_gdf()), \
+             patch("routeiq.graph.graph_loader.GraphLoader") as mock_gl, \
+             patch("routeiq.graph.route_graph.RouteGraph") as mock_rg:
+            mock_gl.return_value.load.return_value = MagicMock()
+            mock_rg.return_value.find_route.return_value = fake_result
+            result_stops, _ = _schedule_stops(stops, "9:00 AM", 1.5, "San Francisco, CA")
+        assert len(result_stops) == 2
+
+    def test_minutes_to_timestr_9am(self):
+        assert _minutes_to_timestr(9 * 60) == "9:00 AM"
+
+    def test_minutes_to_timestr_noon(self):
+        assert _minutes_to_timestr(12 * 60) == "12:00 PM"
+
+    def test_minutes_to_timestr_230pm(self):
+        assert _minutes_to_timestr(14 * 60 + 30) == "2:30 PM"
+
+    def test_minutes_to_timestr_midnight(self):
+        assert _minutes_to_timestr(0) == "12:00 AM"
+
+    def test_timestr_to_minutes_roundtrip(self):
+        for mins in [0, 9 * 60, 12 * 60, 14 * 60 + 30, 23 * 60 + 59]:
+            s = _minutes_to_timestr(mins)
+            assert _timestr_to_minutes(s) == mins
+
+    def test_timestr_to_minutes_invalid(self):
+        assert _timestr_to_minutes("not a time") is None
 
 
 class TestItinerarySchema:

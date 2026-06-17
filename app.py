@@ -21,7 +21,7 @@ _log("import: dotenv")
 from dotenv import load_dotenv
 load_dotenv()
 _log("import: routeiq.ui.card_renderer")
-from routeiq.ui.card_renderer import render_stop_card, render_vector_card, IMAGE_MODAL_HTML
+from routeiq.ui.card_renderer import render_stop_card, render_vector_card, render_dt_card, IMAGE_MODAL_HTML
 _log("imports: light done")
 
 st.set_page_config(
@@ -382,6 +382,7 @@ def _run_dt_narrate_thread(config: dict, graph, result_holder: dict) -> None:
         final = graph.invoke(Command(resume={"approved": True}), config=config)
         result_holder["narrative"] = final.get("narrative")
         result_holder["draft"] = final.get("draft_itinerary")
+        result_holder["route_coords"] = final.get("route_coords") or []
         result_holder["status"] = "done"
     except Exception as exc:
         result_holder["status"] = "error"
@@ -474,6 +475,7 @@ with tab1:
         st.session_state["dt_phase"] = "planning"
         st.session_state.pop("dt_draft", None)
         st.session_state.pop("dt_narrative", None)
+        st.session_state.pop("dt_route_coords", None)
         st.session_state["dt_city_val"] = dt_city
         st.session_state["dt_prefs_val"] = dt_prefs
         st.session_state["dt_hours_val"] = dt_hours
@@ -493,6 +495,7 @@ with tab1:
             "time_budget_hours": float(dt_hours),
             "start_time": dt_start,
             "draft_itinerary": None,
+            "route_coords": None,
             "approved": False,
             "narrative": None,
         }
@@ -530,6 +533,7 @@ with tab1:
                 draft = snapshot.values.get("draft_itinerary")
                 if draft:
                     st.session_state["dt_draft"] = draft
+                    st.session_state["dt_route_coords"] = snapshot.values.get("route_coords") or []
                     st.session_state["dt_phase"] = "draft_ready"
                 else:
                     st.session_state["dt_phase"] = "idle"
@@ -615,39 +619,73 @@ with tab1:
                 st.session_state["dt_narrative"] = rh.get("narrative")
                 if rh.get("draft"):
                     st.session_state["dt_draft"] = rh["draft"]
+                if rh.get("route_coords"):
+                    st.session_state["dt_route_coords"] = rh["route_coords"]
                 st.session_state["dt_phase"] = "done"
             else:
                 st.session_state["dt_phase"] = "draft_ready"
                 st.error(f"Narration error: {rh.get('error', 'unknown')}")
             st.rerun()
 
-    # ── Done — narrative + map ────────────────────────────────────────────────
+    # ── Done — map + cards + narrative ───────────────────────────────────────
 
     if dt_phase == "done":
+        draft = st.session_state.get("dt_draft") or {}
+        stops = draft.get("stops") or []
+        route_coords = st.session_state.get("dt_route_coords") or []
+        city_val = st.session_state.get("dt_city_val", "")
+        hours_val = st.session_state.get("dt_hours_val", "")
+
+        if stops:
+            st.markdown(f"**{city_val} · {hours_val}h · {len(stops)} stops**")
+            map_col, cards_col = st.columns([3, 2])
+
+            with map_col:
+                import folium
+                from folium.plugins import AntPath
+                center_lat = sum(s.get("lat", 0) for s in stops) / len(stops)
+                center_lon = sum(s.get("lon", 0) for s in stops) / len(stops)
+                m = folium.Map(
+                    location=[center_lat, center_lon],
+                    zoom_start=13,
+                    tiles="CartoDB positron",
+                )
+                if route_coords:
+                    AntPath(
+                        locations=route_coords,
+                        color="#6366f1",
+                        weight=4,
+                        opacity=0.85,
+                    ).add_to(m)
+                for i, s in enumerate(stops, 1):
+                    lat, lon = s.get("lat"), s.get("lon")
+                    if lat and lon:
+                        folium.Marker(
+                            [lat, lon],
+                            popup=f"{i}. {s.get('name','')}",
+                            icon=folium.DivIcon(
+                                html=(
+                                    f'<div style="background:#6366f1;color:#fff;border-radius:50%;'
+                                    f'width:24px;height:24px;text-align:center;line-height:24px;'
+                                    f'font-weight:700;font-size:12px;">{i}</div>'
+                                ),
+                            ),
+                        ).add_to(m)
+                st_folium(m, height=480, use_container_width=True, returned_objects=[])
+
+            with cards_col:
+                cards_html = (
+                    '<div style="max-height:480px;overflow-y:auto;padding-right:6px;">'
+                    + "".join(render_dt_card(s, i) for i, s in enumerate(stops, 1))
+                    + "</div>"
+                    + IMAGE_MODAL_HTML
+                )
+                st.components.v1.html(cards_html, height=490, scrolling=False)
+
         narrative = st.session_state.get("dt_narrative") or ""
         if narrative:
             with st.expander("Trip narrative", expanded=True):
                 st.markdown(narrative)
-
-        # Simple Folium map with numbered stop markers
-        draft = st.session_state.get("dt_draft") or {}
-        stops = draft.get("stops") or []
-        if stops:
-            import folium
-            center_lat = sum(s.get("lat", 0) for s in stops) / len(stops)
-            center_lon = sum(s.get("lon", 0) for s in stops) / len(stops)
-            m = folium.Map(location=[center_lat, center_lon], zoom_start=13)
-            for i, s in enumerate(stops, 1):
-                lat, lon = s.get("lat"), s.get("lon")
-                if lat and lon:
-                    folium.Marker(
-                        [lat, lon],
-                        popup=f"{i}. {s.get('name','')}",
-                        icon=folium.DivIcon(
-                            html=f'<div style="background:#6366f1;color:#fff;border-radius:50%;width:24px;height:24px;text-align:center;line-height:24px;font-weight:700;font-size:12px;">{i}</div>',
-                        ),
-                    ).add_to(m)
-            st_folium(m, height=420, use_container_width=True, returned_objects=[])
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 2 — Route Planner (existing code, unchanged)

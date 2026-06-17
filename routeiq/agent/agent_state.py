@@ -13,5 +13,6 @@ class DayTripState(TypedDict):
     time_budget_hours: float
     start_time: str                 # e.g. "9:00 AM"
     draft_itinerary: Optional[dict]
+    route_coords: Optional[List[tuple]]  # (lat, lon) pairs; None until _schedule_stops runs
     approved: bool
     narrative: Optional[str]

@@ -103,6 +103,79 @@ def render_stop_card(sp: ScoredPOI, rank: int) -> str:
     return _CARD_WRAP.format(img=img, body=body)
 
 
+def render_dt_card(stop: dict, rank: int) -> str:
+    """Return a self-contained HTML string for one Day Trip Planner stop card."""
+    category = (stop.get("category") or "").lower()
+    color = CATEGORY_COLORS.get(category, "#7f8c8d")
+    category_label = category.capitalize() or "Stop"
+
+    photo_urls = stop.get("photo_urls") or []
+    img_src = (photo_urls[0] if photo_urls else None) or stop.get("image_url") or _PLACEHOLDER
+    zoom_src = img_src if img_src != _PLACEHOLDER else None
+    img = _img_tag(img_src, zoom_src=zoom_src)
+
+    arrival = stop.get("arrival_time") or ""
+    departure = stop.get("departure_time") or ""
+    time_slot = f"{arrival} – {departure}" if arrival and departure else arrival or departure
+
+    rating = stop.get("rating")
+    review_count = stop.get("review_count")
+    review_source = stop.get("review_source") or ""
+    rating_html = ""
+    if rating is not None:
+        count_str = f" ({review_count:,})" if review_count else ""
+        source_str = f" · {review_source}" if review_source else ""
+        rating_html = (
+            f'<div style="font-size:12px;color:#b7791f;margin-bottom:4px;">'
+            f'⭐ {rating:.1f}{count_str}'
+            f'<span style="color:#7f8c8d;">{source_str}</span></div>'
+        )
+
+    why_visit = (stop.get("why_visit") or "")[:200]
+    why_html = (
+        f'<div style="font-size:12px;color:#555;line-height:1.4;margin-bottom:4px;'
+        f'display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">'
+        f'{why_visit}</div>'
+    ) if why_visit else ""
+
+    visitor_quote = stop.get("visitor_quote") or ""
+    quote_html = (
+        f'<div style="font-size:11px;color:#4f46e5;border-left:3px solid #6366f1;'
+        f'padding-left:7px;margin-bottom:5px;font-style:italic;line-height:1.4;">'
+        f'"{visitor_quote[:140]}"</div>'
+    ) if visitor_quote else ""
+
+    activities = (stop.get("activities") or [])[:3]
+    badges_html = ""
+    if activities:
+        badges = "".join(
+            f'<span style="background:#f1f5f9;color:#475569;font-size:10px;'
+            f'padding:2px 7px;border-radius:10px;">{a}</span>'
+            for a in activities
+        )
+        badges_html = f'<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:4px;">{badges}</div>'
+
+    hours = stop.get("hours") or ""
+    hours_html = (
+        f'<div style="font-size:11px;color:#7f8c8d;">🕐 {hours}</div>'
+    ) if hours else ""
+
+    body = (
+        f'<div style="flex:1;min-width:0;">'
+        f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">'
+        f'<span style="background:{color};color:#fff;font-size:10px;font-weight:600;'
+        f'padding:2px 8px;border-radius:12px;text-transform:uppercase;letter-spacing:0.5px;">'
+        f'{category_label}</span>'
+        f'<span style="color:#7f8c8d;font-size:12px;">{time_slot}</span>'
+        f'</div>'
+        f'<div style="font-size:15px;font-weight:600;color:#2c3e50;margin-bottom:4px;'
+        f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{rank}. {stop.get("name","")}</div>'
+        f'{rating_html}{why_html}{quote_html}{badges_html}{hours_html}'
+        f'</div>'
+    )
+    return _CARD_WRAP.format(img=img, body=body)
+
+
 def render_vector_card(result: dict, rank: int) -> str:
     """Return a self-contained HTML string for one Vector Baseline result card."""
     color = CATEGORY_COLORS.get(result.get("category", ""), "#7f8c8d")
