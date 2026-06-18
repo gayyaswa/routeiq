@@ -326,44 +326,45 @@ def _expand_kg_for_city(kg, city: str) -> None:
     kg.add_city_pois(city_short, lat, lon, pois)
 
 
-def _dt_stop_card_html(stop: dict, i: int) -> str:
-    photo = (stop.get("photo_urls") or [stop.get("image_url")] or [None])[0] or ""
-    img_html = (
-        f'<img src="{photo}" style="width:96px;height:76px;object-fit:cover;border-radius:8px;flex-shrink:0;">'
-        if photo else
-        '<div style="width:96px;height:76px;border-radius:8px;background:#f3f4f6;flex-shrink:0;"></div>'
-    )
-    rating = stop.get("rating")
-    review_count = stop.get("review_count")
-    review_source = stop.get("review_source") or "Unknown"
-    rating_str = f"⭐ {rating:.1f}" if rating is not None else "—"
-    count_str = f" ({review_count:,})" if review_count else ""
-    activities = stop.get("activities") or []
-    act_badges = "".join(
-        f'<span style="font-size:11px;background:#e0e7ff;color:#3730a3;border-radius:12px;padding:2px 8px;">{a}</span>'
-        for a in activities[:3]
-    )
-    visitor_quote = stop.get("visitor_quote") or ""
-    visitor_summary = stop.get("visitor_summary") or ""
-    why_visit = stop.get("why_visit") or ""
-    hours = stop.get("hours") or ""
+def _render_dt_map(stops: list, route_coords: list, height: int = 340):
+    """Build a Folium map for Day Trip stops. AntPath when road coords available, dashed PolyLine otherwise."""
+    import folium
+    from folium.plugins import AntPath
 
-    return f"""
-<div style="border:1px solid #e5e7eb;border-radius:12px;padding:14px;margin-bottom:14px;background:#fff;">
-  <div style="display:flex;gap:12px;align-items:flex-start;">
-    {img_html}
-    <div style="flex:1;min-width:0;">
-      <div style="font-size:11px;color:#6b7280;">Stop {i} · {stop.get('arrival_time','')} – {stop.get('departure_time','')}</div>
-      <div style="font-size:16px;font-weight:700;margin:2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{stop.get('name','')}</div>
-      <div style="font-size:12px;color:#059669;">{rating_str}{count_str} · <span style="color:#9ca3af;">{review_source}</span></div>
-    </div>
-  </div>
-  {f'<div style="font-size:13px;color:#374151;margin-top:10px;line-height:1.5;">{why_visit}</div>' if why_visit else ''}
-  {f'<div style="font-size:12px;font-style:italic;color:#4b5563;margin-top:6px;border-left:3px solid #6366f1;padding-left:8px;">{visitor_quote}</div>' if visitor_quote else ''}
-  {f'<div style="font-size:12px;color:#6b7280;margin-top:4px;line-height:1.5;">{visitor_summary}</div>' if visitor_summary else ''}
-  {f'<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px;">{act_badges}</div>' if act_badges else ''}
-  {f'<div style="font-size:11px;color:#9ca3af;margin-top:6px;">🕐 {hours}</div>' if hours else ''}
-</div>"""
+    lats = [s["lat"] for s in stops if s.get("lat")]
+    lons = [s["lon"] for s in stops if s.get("lon")]
+    center_lat = sum(lats) / len(lats) if lats else 0
+    center_lon = sum(lons) / len(lons) if lons else 0
+    m = folium.Map(location=[center_lat, center_lon], zoom_start=13, tiles="CartoDB positron")
+
+    if len(lats) > 1:
+        m.fit_bounds([[min(lats), min(lons)], [max(lats), max(lons)]])
+
+    if route_coords:
+        AntPath(locations=route_coords, color="#6366f1", weight=4, opacity=0.85).add_to(m)
+    else:
+        # Straight-line fallback so the route order is always visible
+        latlon_pairs = [(s["lat"], s["lon"]) for s in stops if s.get("lat") and s.get("lon")]
+        if latlon_pairs:
+            folium.PolyLine(
+                latlon_pairs, color="#6366f1", weight=3, opacity=0.6, dash_array="8"
+            ).add_to(m)
+
+    for i, s in enumerate(stops, 1):
+        lat, lon = s.get("lat"), s.get("lon")
+        if lat and lon:
+            folium.Marker(
+                [lat, lon],
+                popup=f"{i}. {s.get('name', '')}",
+                icon=folium.DivIcon(
+                    html=(
+                        f'<div style="background:#6366f1;color:#fff;border-radius:50%;'
+                        f'width:24px;height:24px;text-align:center;line-height:24px;'
+                        f'font-weight:700;font-size:12px;">{i}</div>'
+                    ),
+                ),
+            ).add_to(m)
+    return m
 
 
 def _run_dt_planning_thread(initial_state: dict, config: dict, graph, result_holder: dict) -> None:
@@ -543,9 +544,9 @@ with tab1:
                 st.error(f"Planning error: {rh.get('error', 'unknown')}")
             st.rerun()
 
-    # ── Draft ready — show cards + approve/refine ─────────────────────────────
+    # ── Draft ready — map + cards + approve/refine ────────────────────────────
 
-    if dt_phase in ("draft_ready", "narrating", "done"):
+    if dt_phase in ("draft_ready", "narrating"):
         draft = st.session_state.get("dt_draft") or {}
         stops = draft.get("stops") or []
 
@@ -555,12 +556,17 @@ with tab1:
             st.markdown(
                 f"**Draft itinerary — {city_val} · {hours_val}h · {len(stops)} stops**"
             )
+            route_coords_draft = st.session_state.get("dt_route_coords") or []
+            m_draft = _render_dt_map(stops, route_coords_draft, height=300)
+            st_folium(m_draft, height=300, use_container_width=True, returned_objects=[])
+
             cards_html = (
-                '<div style="max-height:500px;overflow-y:auto;padding-right:6px;">'
-                + "".join(_dt_stop_card_html(s, i) for i, s in enumerate(stops, 1))
+                '<div style="max-height:420px;overflow-y:auto;padding-right:6px;">'
+                + "".join(render_dt_card(s, i) for i, s in enumerate(stops, 1))
                 + "</div>"
+                + IMAGE_MODAL_HTML
             )
-            st.components.v1.html(cards_html, height=510, scrolling=False)
+            st.components.v1.html(cards_html, height=430, scrolling=False)
 
         # Approve / Refine row (only when waiting for decision)
         if dt_phase == "draft_ready":
@@ -641,37 +647,8 @@ with tab1:
             map_col, cards_col = st.columns([3, 2])
 
             with map_col:
-                import folium
-                from folium.plugins import AntPath
-                center_lat = sum(s.get("lat", 0) for s in stops) / len(stops)
-                center_lon = sum(s.get("lon", 0) for s in stops) / len(stops)
-                m = folium.Map(
-                    location=[center_lat, center_lon],
-                    zoom_start=13,
-                    tiles="CartoDB positron",
-                )
-                if route_coords:
-                    AntPath(
-                        locations=route_coords,
-                        color="#6366f1",
-                        weight=4,
-                        opacity=0.85,
-                    ).add_to(m)
-                for i, s in enumerate(stops, 1):
-                    lat, lon = s.get("lat"), s.get("lon")
-                    if lat and lon:
-                        folium.Marker(
-                            [lat, lon],
-                            popup=f"{i}. {s.get('name','')}",
-                            icon=folium.DivIcon(
-                                html=(
-                                    f'<div style="background:#6366f1;color:#fff;border-radius:50%;'
-                                    f'width:24px;height:24px;text-align:center;line-height:24px;'
-                                    f'font-weight:700;font-size:12px;">{i}</div>'
-                                ),
-                            ),
-                        ).add_to(m)
-                st_folium(m, height=480, use_container_width=True, returned_objects=[])
+                m_done = _render_dt_map(stops, route_coords, height=480)
+                st_folium(m_done, height=480, use_container_width=True, returned_objects=[])
 
             with cards_col:
                 cards_html = (
