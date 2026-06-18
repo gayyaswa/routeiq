@@ -408,9 +408,14 @@ def _render_dt_map(stops: list, route_coords: list, height: int = 340):
 
 
 def _run_dt_planning_thread(initial_state: dict, config: dict, graph, result_holder: dict) -> None:
+    from langgraph.errors import GraphInterrupt
     try:
         for _ in graph.stream(initial_state, config=config):
             pass
+        result_holder["status"] = "interrupted"
+    except GraphInterrupt:
+        # interrupt_before=["review"] raises GraphInterrupt when the draft is ready —
+        # this is the expected success path, not an error.
         result_holder["status"] = "interrupted"
     except Exception as exc:
         result_holder["status"] = "error"
@@ -432,12 +437,15 @@ def _run_dt_narrate_thread(config: dict, graph, result_holder: dict) -> None:
 
 def _run_dt_refine_thread(feedback: str, config: dict, graph, result_holder: dict) -> None:
     from langgraph.types import Command
+    from langgraph.errors import GraphInterrupt
     try:
         for _ in graph.stream(
             Command(resume={"approved": False, "feedback": feedback}),
             config=config,
         ):
             pass
+        result_holder["status"] = "interrupted"
+    except GraphInterrupt:
         result_holder["status"] = "interrupted"
     except Exception as exc:
         result_holder["status"] = "error"
