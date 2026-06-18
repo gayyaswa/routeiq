@@ -1,7 +1,10 @@
 from __future__ import annotations
+import logging
 import threading
 import time
 from typing import Any, List, Optional
+
+logger = logging.getLogger(__name__)
 
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
@@ -28,6 +31,7 @@ _TOOL_TO_STEP: dict[str, str] = {
     "enrich_poi_details": "find_pois",
     "get_travel_time": "find_pois",
     "estimate_visit_duration": "find_pois",
+    "search_poi_by_name": "find_pois",
     "rate_pois": "rate_pois",
 }
 
@@ -175,16 +179,22 @@ def _schedule_stops(
         start_min = _timestr_to_minutes(start_time) or 9 * 60.0
         budget_min = time_budget_hours * 60.0
 
-        # Geocode city → centroid for GraphLoader bbox
-        gdf = ox.geocoder.geocode_to_gdf(city)
-        centroid = gdf.geometry.iloc[0].centroid
-        lat, lon = centroid.y, centroid.x
+        # ox.geocode() returns Nominatim's representative point (urban core), not
+        # the polygon centroid — avoids offshore features like the Farallon Islands
+        # pulling SF's polygon centroid ~25 km into the Pacific.
+        lat, lon = ox.geocode(city)
+        logger.debug("schedule city=%r geocode_point=(%.4f,%.4f) bbox=N%.3f/S%.3f/E%.3f/W%.3f",
+                     city, lat, lon, lat+0.15, lat-0.15, lon+0.15, lon-0.15)
 
         G = GraphLoader().load(
             north=lat + 0.15, south=lat - 0.15,
             east=lon + 0.15,  west=lon - 0.15,
         )
         rg = RouteGraph(G)
+        logger.debug("schedule graph loaded — %d nodes", G.number_of_nodes())
+
+        for s in stops:
+            logger.debug("schedule input stop: %r lat=%.4f lon=%.4f", s.get("name"), s.get("lat", 0), s.get("lon", 0))
 
         # Nearest-neighbor sort: best composite_score first, then greedy by distance
         remaining = list(stops)
@@ -220,8 +230,15 @@ def _schedule_stops(
                 try:
                     result = rg.find_route(stop["lat"], stop["lon"], nxt["lat"], nxt["lon"])
                     drive_min = result.drive_time_min + _TRANSITION_OVERHEAD_MIN
+                    first_c = result.route_coords[0] if result.route_coords else None
+                    last_c  = result.route_coords[-1] if result.route_coords else None
+                    logger.debug("schedule leg %d→%d %r→%r: OK %d coords first=%s last=%s",
+                                 i, i+1, stop.get("name"), nxt.get("name"),
+                                 len(result.route_coords), first_c, last_c)
                     leg_coord_slices.append(result.route_coords)
-                except Exception:
+                except Exception as exc:
+                    logger.debug("schedule leg %d→%d %r→%r: FAILED %s",
+                                 i, i+1, stop.get("name"), nxt.get("name"), exc)
                     leg_coord_slices.append([])
                     drive_min = 15.0
                 current_min += drive_min
@@ -242,8 +259,46 @@ def _schedule_stops(
         return sorted_stops, all_coords
 
     except Exception as exc:
-        print(f"[dt_agent] _schedule_stops fallback: {exc}", flush=True)
+        logger.warning("_schedule_stops fallback — returning original stops unscheduled: %s", exc)
         return stops, []
+
+
+# ── Image backfill ────────────────────────────────────────────────────────────
+
+def _backfill_images(stops: list[dict]) -> None:
+    """Fill image_url from Wikipedia for any stop that has no provider photo_urls.
+
+    Skips stops that already have at least one photo from TripAdvisor/Foursquare.
+    Runs fetches in parallel — Wikipedia lookup is ~0.3 s each.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+    from routeiq.graph.poi import POI
+    from routeiq.rag.wikipedia_fetcher import WikipediaFetcher
+
+    needs_image = [
+        s for s in stops
+        if not (s.get("photo_urls") or s.get("image_url"))
+    ]
+    if not needs_image:
+        return
+
+    def _fetch_one(stop: dict) -> None:
+        poi = POI(
+            name=stop["name"],
+            category=stop.get("category", "tourism"),
+            lat=stop.get("lat", 0.0),
+            lon=stop.get("lon", 0.0),
+            osm_id="agent_img_backfill",
+        )
+        try:
+            WikipediaFetcher().enrich(poi)
+            if poi.image_url:
+                stop["image_url"] = poi.image_url
+        except Exception:
+            pass  # best-effort; missing image is non-fatal
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        list(pool.map(_fetch_one, needs_image))
 
 
 # ── Graph nodes ───────────────────────────────────────────────────────────────
@@ -301,8 +356,8 @@ def _plan(state: DayTripState, config: Optional[RunnableConfig] = None) -> dict:
         "for " + state["city"] + ". Follow all faithfulness rules: visitor_quote from "
         "review snippets, visitor_summary synthesizing visitor sentiment, why_visit from "
         "Wikipedia only, activities grounded in Wikipedia and reviews. "
-        "CRITICAL: copy photo_urls, rating, review_count, review_source, and hours "
-        "EXACTLY from rate_pois tool output — do not invent or modify these values."
+        "CRITICAL: copy lat, lon, photo_urls, rating, review_count, review_source, and hours "
+        "EXACTLY from find_city_pois / rate_pois tool output — do not invent or modify these values."
     )
     itinerary: DayTripItinerary = structured_llm.invoke(
         messages + [HumanMessage(content=extraction_prompt)]
@@ -318,6 +373,13 @@ def _plan(state: DayTripState, config: Optional[RunnableConfig] = None) -> dict:
         state["time_budget_hours"],
         state["city"],
     )
+
+    # Backfill Wikipedia thumbnails for stops that got no TripAdvisor/Foursquare photos.
+    # Runs in parallel — each Wikipedia fetch is ~0.3 s, 8 stops ≈ 0.5 s total.
+    if thread_id:
+        _emit_progress(thread_id, "extract", "Fetching images…")
+    _backfill_images(scheduled_stops)
+
     itinerary_dict["stops"] = scheduled_stops
 
     print(f"[dt_agent] _plan done in {time.perf_counter()-t0:.1f}s — {len(scheduled_stops)} stops", flush=True)

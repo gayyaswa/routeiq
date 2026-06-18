@@ -83,8 +83,9 @@ def test_get_pois_for_city_sf_returns_pois(kg):
     pois = kg.get_pois_for_city("San Francisco")
     names = [p.name for p in pois]
     assert "Coit Tower" in names
-    # Golden Gate Bridge is nearest-city = Sausalito (lat 37.82 is closer to Sausalito centroid)
-    # so we only assert Coit Tower which is unambiguously in SF
+    # Golden Gate Bridge LOCATED_IN = Sausalito (heuristic), but its coordinates
+    # are inside SF's OSM polygon — polygon gate overrides LOCATED_IN.
+    assert "Golden Gate Bridge" in names
 
 
 def test_get_pois_for_city_strips_state_suffix(kg):

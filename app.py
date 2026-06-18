@@ -20,6 +20,24 @@ from streamlit_folium import st_folium
 _log("import: dotenv")
 from dotenv import load_dotenv
 load_dotenv()
+
+import logging
+from logging.handlers import RotatingFileHandler
+import os as _os
+
+# Terminal: WARNING+ only — keeps Streamlit output readable
+logging.basicConfig(
+    level=logging.WARNING,
+    format="%(asctime)s %(levelname)-8s %(name)s — %(message)s",
+    datefmt="%H:%M:%S",
+)
+# File: DEBUG for routeiq namespace only — grep-friendly, processed by Claude
+_os.makedirs("logs", exist_ok=True)
+_fh = RotatingFileHandler("logs/routeiq.log", maxBytes=5_000_000, backupCount=2)
+_fh.setLevel(logging.DEBUG)
+_fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)-8s %(name)s — %(message)s", datefmt="%H:%M:%S"))
+logging.getLogger("routeiq").addHandler(_fh)
+logging.getLogger("routeiq").setLevel(logging.DEBUG)
 _log("import: routeiq.ui.card_renderer")
 from routeiq.ui.card_renderer import render_stop_card, render_vector_card, render_dt_card, IMAGE_MODAL_HTML
 _log("imports: light done")
@@ -311,17 +329,32 @@ def _expand_kg_for_city(kg, city: str) -> None:
     """Geocode city and fetch POIs from Overpass into the KG. Best-effort — silent on failure."""
     try:
         import osmnx as ox
+        from shapely.geometry import Point
         gdf = ox.geocoder.geocode_to_gdf(city)
+        city_poly = gdf.geometry.iloc[0]  # actual administrative boundary polygon
         lat = float(gdf.geometry.centroid.y.iloc[0])
         lon = float(gdf.geometry.centroid.x.iloc[0])
     except Exception:
         return
 
-    from routeiq.graph.poi_finder import POIFinder
+    from routeiq.graph.poi_finder import POIFinder, OverpassUnavailableError
     pad = 0.15
-    pois = POIFinder().find_pois_in_bbox(
-        south=lat - pad, north=lat + pad, west=lon - pad, east=lon + pad
-    )
+    try:
+        pois = POIFinder().find_pois_in_bbox(
+            south=lat - pad, north=lat + pad, west=lon - pad, east=lon + pad
+        )
+    except OverpassUnavailableError:
+        st.warning(
+            f"⚠️ OpenStreetMap POI service is temporarily unavailable for **{city}**. "
+            "Planning will continue — you can still add specific landmarks using the "
+            "**Refine** box (e.g. *Add Griffith Observatory*).",
+            icon=None,
+        )
+        return
+    # Keep only POIs inside the city's administrative boundary — the bbox above
+    # is a coarse pre-filter for Overpass; the polygon clip prevents out-of-city
+    # attractions (e.g. Marin County POIs for a SF query) from entering the KG.
+    pois = [p for p in pois if city_poly.contains(Point(p.lon, p.lat))]
     city_short = city.split(",")[0].strip()
     kg.add_city_pois(city_short, lat, lon, pois)
 
@@ -341,13 +374,20 @@ def _render_dt_map(stops: list, route_coords: list, height: int = 340):
         m.fit_bounds([[min(lats), min(lons)], [max(lats), max(lons)]])
 
     if route_coords:
-        AntPath(locations=route_coords, color="#6366f1", weight=4, opacity=0.85).add_to(m)
+        AntPath(
+            locations=route_coords,
+            delay=800,
+            weight=5,
+            color="#6366f1",
+            pulse_color="#ffffff",
+            dash_array=[10, 20],
+        ).add_to(m)
     else:
-        # Straight-line fallback so the route order is always visible
+        # Straight-line fallback — OSM graph not yet cached for this city
         latlon_pairs = [(s["lat"], s["lon"]) for s in stops if s.get("lat") and s.get("lon")]
         if latlon_pairs:
             folium.PolyLine(
-                latlon_pairs, color="#6366f1", weight=3, opacity=0.6, dash_array="8"
+                latlon_pairs, color="#6366f1", weight=5, opacity=0.75, dash_array="10 15"
             ).add_to(m)
 
     for i, s in enumerate(stops, 1):
@@ -426,6 +466,17 @@ tab1, tab2 = st.tabs(["🏙 Day Trip Planner", "🗺 Route Planner"])
 # TAB 1 — Day Trip Planner
 # ═══════════════════════════════════════════════════════════════════════════════
 
+# Cities pre-loaded in the Bay Area KG master — instant POI lookup, no Overpass call
+_DEMO_CITIES_FAST = [
+    "San Francisco, CA", "Oakland, CA", "Berkeley, CA",
+    "San Jose, CA", "Santa Cruz, CA",
+]
+# Cities that need a live Overpass fetch on first use (~15–30 s), then cached
+_DEMO_CITIES_SLOW = [
+    "Los Angeles, CA", "New York, NY", "Chicago, IL",
+    "Seattle, WA", "Austin, TX",
+]
+
 with tab1:
     st.markdown("**Plan a scenic day in any city — the agent picks stops, you approve.**")
 
@@ -436,6 +487,10 @@ with tab1:
         dt_city = st.text_input(
             "City", value="San Francisco, CA",
             placeholder="San Francisco, CA", key="dt_city_input"
+        )
+        st.caption(
+            "⚡ **Instant:** " + " · ".join(_DEMO_CITIES_FAST) + "  \n"
+            "🌐 **First use ~30 s:** " + " · ".join(_DEMO_CITIES_SLOW)
         )
     with dt_col2:
         dt_prefs = st.multiselect(
@@ -590,6 +645,15 @@ with tab1:
                 feedback_text = st.text_input(
                     "Feedback", placeholder="e.g. Add more outdoor stops, no museums",
                     key="dt_feedback_input", label_visibility="collapsed"
+                )
+                st.caption(
+                    "💡 Try: &nbsp;"
+                    "**Add Lombard Street** · "
+                    "**Skip museums** · "
+                    "**More nature spots** · "
+                    "**Start at 10 AM** · "
+                    "**Fewer stops** · "
+                    "**Include the Ferry Building**"
                 )
                 if st.button("🔄 Refine", key="dt_refine") and feedback_text.strip():
                     _, dt_graph = _load_day_trip_resources()

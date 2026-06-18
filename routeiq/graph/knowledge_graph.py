@@ -72,19 +72,49 @@ class RouteKnowledgeGraph:
         return {d["name"] for n, d in self._g.nodes(data=True) if d.get("type") == "City"}
 
     def get_pois_for_city(self, city_name: str) -> list[POI]:
-        """Returns POI objects whose LOCATED_IN edge points to city_name.
+        """Return POIs spatially contained within city_name's OSM administrative boundary.
 
-        Normalises input — strips state suffix so "San Francisco, CA" matches "San Francisco".
+        Uses geocode_to_gdf to fetch the real city polygon from OSM (cached per instance),
+        so correctness does not depend on the _nearest_city heuristic used when building
+        LOCATED_IN edges.  The LOCATED_IN pre-filter still runs as a fast coarse pass to
+        avoid polygon-checking every POI in the graph.
         """
+        from shapely.geometry import Point
         short = city_name.split(",")[0].strip()
+        city_poly = self._city_polygon(city_name)
+
         result = []
         for node_id, data in self._g.nodes(data=True):
             if data.get("type") != "POI":
                 continue
-            city = self._city_for_poi(node_id)
-            if city == short:
-                result.append(POI(**{k: v for k, v in data.items() if k in _POI_FIELDS}))
+            poi = POI(**{k: v for k, v in data.items() if k in _POI_FIELDS})
+            if city_poly is not None:
+                # Polygon is authoritative — supersedes LOCATED_IN heuristic so
+                # border attractions (e.g. Golden Gate Bridge → Sausalito) are included.
+                if not city_poly.contains(Point(poi.lon, poi.lat)):
+                    continue
+            else:
+                # No polygon available — fall back to LOCATED_IN heuristic.
+                poi_city = self._city_for_poi(node_id)
+                if poi_city is not None and poi_city != short:
+                    continue
+            result.append(poi)
         return result
+
+    def _city_polygon(self, city_name: str):
+        """Fetch and cache the OSM administrative boundary polygon for city_name."""
+        if not hasattr(self, "_poly_cache"):
+            self._poly_cache: dict = {}
+        if city_name not in self._poly_cache:
+            try:
+                import osmnx as ox
+                gdf = ox.geocoder.geocode_to_gdf(city_name)
+                self._poly_cache[city_name] = gdf.geometry.iloc[0]
+                print(f"[kg] polygon fetched for '{city_name}'", flush=True)
+            except Exception as exc:
+                print(f"[kg] polygon fetch failed for '{city_name}': {exc} — falling back to LOCATED_IN only", flush=True)
+                self._poly_cache[city_name] = None
+        return self._poly_cache[city_name]
 
     def add_city_pois(
         self,

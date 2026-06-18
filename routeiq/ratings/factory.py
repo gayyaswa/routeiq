@@ -41,4 +41,8 @@ class RatingsFactory:
             from routeiq.ratings.google_places import GooglePlacesRatingProvider
             return GooglePlacesRatingProvider()
 
+        if provider == "llm_synthetic":
+            from routeiq.ratings.llm_synthetic import LLMSyntheticRatingProvider
+            return LLMSyntheticRatingProvider()
+
         return _NullRatingProvider()

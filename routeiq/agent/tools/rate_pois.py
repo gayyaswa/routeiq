@@ -11,10 +11,17 @@ from routeiq.ratings.factory import RatingsFactory
 _TOP_N = 30
 
 
-def _composite_score(rating: float | None, review_count: int | None, has_wikipedia: bool) -> float:
+def _wikipedia_weight(wikipedia_tag: str | None) -> float:
+    """English Wikipedia = real significance signal; Cebuano/other = auto-generated stubs."""
+    if not wikipedia_tag:
+        return 0.0
+    return 0.1 if wikipedia_tag.startswith("en:") else 0.01
+
+
+def _composite_score(rating: float | None, review_count: int | None, wikipedia_tag: str | None) -> float:
     r = (rating / 5.0) if rating is not None else 0.5        # unknown → neutral
     v = math.log1p(review_count or 0) / math.log1p(10_000)
-    w = 0.1 if has_wikipedia else 0.0
+    w = _wikipedia_weight(wikipedia_tag)
     return 0.4 * r + 0.3 * v + 0.3 * w
 
 
@@ -48,7 +55,7 @@ def rate_pois(city: str, poi_list_json: str) -> str:
 
     scored = sorted(
         kept,
-        key=lambda rp: _composite_score(rp.rating, rp.review_count, bool(rp.poi.wikipedia_tag)),
+        key=lambda rp: _composite_score(rp.rating, rp.review_count, rp.poi.wikipedia_tag),
         reverse=True,
     )
 
@@ -63,7 +70,7 @@ def rate_pois(city: str, poi_list_json: str) -> str:
         entry["photo_urls"] = rp.photo_urls or []
         entry["hours"] = rp.hours
         entry["composite_score"] = round(
-            _composite_score(rp.rating, rp.review_count, bool(rp.poi.wikipedia_tag)), 4
+            _composite_score(rp.rating, rp.review_count, rp.poi.wikipedia_tag), 4
         )
         results.append(entry)
 

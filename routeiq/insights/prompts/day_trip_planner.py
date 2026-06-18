@@ -24,8 +24,12 @@ Tool call order:
 1. find_city_pois — get POIs for the city
 2. rate_pois — enrich with ratings and reviews; keep top candidates
 3. enrich_poi_details — fetch Wikipedia context for the top 8 POIs
-4. estimate_visit + get_travel_time — build the time schedule
-5. Output the final itinerary as JSON
+4. estimate_visit_duration — get visit duration per stop subtype
+
+Your job is to SELECT the best 8–10 stops that match the preferences and variety of
+experience. Do NOT try to calculate travel times or fit stops within the time budget
+yourself — road-based scheduling is handled automatically after you output the itinerary.
+Set arrival_time and departure_time to placeholder values ("TBD"); they will be replaced.
 
 Output format (JSON only, no fences):
 {{
@@ -39,8 +43,8 @@ Output format (JSON only, no fences):
       "category": "<OSM category>",
       "lat": 0.0,
       "lon": 0.0,
-      "arrival_time": "9:00 AM",
-      "departure_time": "10:30 AM",
+      "arrival_time": "TBD",
+      "departure_time": "TBD",
       "visit_duration_min": 90,
       "why_visit": "<one factual Wikipedia sentence>",
       "visitor_quote": "<review_source>: '<single most vivid snippet from all_snippets>'",

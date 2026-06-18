@@ -199,18 +199,9 @@ class TestScheduleStops:
             for i in range(n)
         ]
 
-    def _mock_osmnx_gdf(self):
-        """Mock return value for ox.geocoder.geocode_to_gdf()."""
-        mock_centroid = MagicMock()
-        mock_centroid.y = 37.77
-        mock_centroid.x = -122.41
-        mock_geom = MagicMock()
-        mock_geom.centroid = mock_centroid
-        mock_geometry = MagicMock()
-        mock_geometry.iloc = [mock_geom]
-        mock_gdf = MagicMock()
-        mock_gdf.geometry = mock_geometry
-        return mock_gdf
+    def _mock_geocode(self):
+        """Mock return value for ox.geocode() — (lat, lon) tuple."""
+        return (37.77, -122.41)
 
     def _fake_route_result(self, drive_time_min: float = 8.0) -> RouteResult:
         return RouteResult(
@@ -227,14 +218,14 @@ class TestScheduleStops:
 
     def test_returns_original_on_geocode_failure(self):
         stops = self._make_stops(2)
-        with patch("osmnx.geocoder.geocode_to_gdf", side_effect=RuntimeError("network error")):
+        with patch("osmnx.geocode", side_effect=RuntimeError("network error")):
             result_stops, coords = _schedule_stops(stops, "9:00 AM", 8.0, "San Francisco, CA")
         assert result_stops == stops
         assert coords == []
 
     def test_returns_original_on_graph_load_failure(self):
         stops = self._make_stops(2)
-        with patch("osmnx.geocoder.geocode_to_gdf", return_value=self._mock_osmnx_gdf()), \
+        with patch("osmnx.geocode", return_value=self._mock_geocode()), \
              patch("routeiq.graph.graph_loader.GraphLoader") as mock_gl:
             mock_gl.return_value.load.side_effect = RuntimeError("cache miss")
             result_stops, coords = _schedule_stops(stops, "9:00 AM", 8.0, "San Francisco, CA")
@@ -244,7 +235,7 @@ class TestScheduleStops:
     def test_first_stop_gets_start_time(self):
         stops = self._make_stops(2, visit_min=60)
         fake_result = self._fake_route_result(drive_time_min=8.0)
-        with patch("osmnx.geocoder.geocode_to_gdf", return_value=self._mock_osmnx_gdf()), \
+        with patch("osmnx.geocode", return_value=self._mock_geocode()), \
              patch("routeiq.graph.graph_loader.GraphLoader") as mock_gl, \
              patch("routeiq.graph.route_graph.RouteGraph") as mock_rg:
             mock_gl.return_value.load.return_value = MagicMock()
@@ -257,7 +248,7 @@ class TestScheduleStops:
         # Stop 3 departs at 11:00 AM; budget=1.5h ends at 10:30 AM → stop 3 trimmed → 2 remain.
         stops = self._make_stops(3, visit_min=30)
         fake_result = self._fake_route_result(drive_time_min=8.0)  # +7 overhead = 15 total
-        with patch("osmnx.geocoder.geocode_to_gdf", return_value=self._mock_osmnx_gdf()), \
+        with patch("osmnx.geocode", return_value=self._mock_geocode()), \
              patch("routeiq.graph.graph_loader.GraphLoader") as mock_gl, \
              patch("routeiq.graph.route_graph.RouteGraph") as mock_rg:
             mock_gl.return_value.load.return_value = MagicMock()

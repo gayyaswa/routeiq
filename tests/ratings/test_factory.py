@@ -5,6 +5,7 @@ from unittest.mock import patch
 from routeiq.ratings.factory import RatingsFactory, _NullRatingProvider
 from routeiq.ratings.foursquare import FoursquareRatingProvider
 from routeiq.ratings.google_places import GooglePlacesRatingProvider
+from routeiq.ratings.llm_synthetic import LLMSyntheticRatingProvider
 from routeiq.graph.poi import POI
 
 
@@ -36,6 +37,11 @@ class TestRatingsFactory:
         with patch.dict(os.environ, {"RATING_PROVIDER": "google_places"}):
             provider = RatingsFactory.create()
         assert isinstance(provider, GooglePlacesRatingProvider)
+
+    def test_llm_synthetic_returns_llm_provider(self):
+        with patch.dict(os.environ, {"RATING_PROVIDER": "llm_synthetic"}):
+            provider = RatingsFactory.create()
+        assert isinstance(provider, LLMSyntheticRatingProvider)
 
     def test_unknown_provider_returns_null(self):
         with patch.dict(os.environ, {"RATING_PROVIDER": "unknown_xyz"}):

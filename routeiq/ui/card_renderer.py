@@ -141,9 +141,16 @@ def render_dt_card(stop: dict, rank: int) -> str:
     visitor_quote = stop.get("visitor_quote") or ""
     quote_html = (
         f'<div style="font-size:11px;color:#4f46e5;border-left:3px solid #6366f1;'
-        f'padding-left:7px;margin-bottom:5px;font-style:italic;line-height:1.4;">'
+        f'padding-left:7px;margin-bottom:4px;font-style:italic;line-height:1.4;">'
         f'"{visitor_quote[:140]}"</div>'
     ) if visitor_quote else ""
+
+    visitor_summary = stop.get("visitor_summary") or ""
+    summary_html = (
+        f'<div style="font-size:11px;color:#374151;line-height:1.5;margin-bottom:5px;'
+        f'background:#f8fafc;border-radius:5px;padding:5px 8px;">'
+        f'<span style="color:#6b7280;font-weight:600;margin-right:4px;">💬</span>{visitor_summary[:220]}</div>'
+    ) if visitor_summary else ""
 
     activities = (stop.get("activities") or [])[:3]
     badges_html = ""
@@ -160,6 +167,21 @@ def render_dt_card(stop: dict, rank: int) -> str:
         f'<div style="font-size:11px;color:#7f8c8d;">🕐 {hours}</div>'
     ) if hours else ""
 
+    # Extra photo thumbnails (photos 2–5) as a clickable strip below the main card row
+    extra_photos = [u for u in photo_urls[1:4] if u]
+    photo_strip_html = ""
+    if extra_photos:
+        thumbs = "".join(
+            f'<img src="{u}" onclick="riShow(\'{u}\')" '
+            f'onerror="this.style.display=\'none\'" '
+            f'style="width:52px;height:52px;object-fit:cover;border-radius:5px;'
+            f'cursor:zoom-in;flex-shrink:0;" />'
+            for u in extra_photos
+        )
+        photo_strip_html = (
+            f'<div style="display:flex;gap:5px;margin-top:8px;overflow-x:auto;">{thumbs}</div>'
+        )
+
     body = (
         f'<div style="flex:1;min-width:0;">'
         f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">'
@@ -170,10 +192,20 @@ def render_dt_card(stop: dict, rank: int) -> str:
         f'</div>'
         f'<div style="font-size:15px;font-weight:600;color:#2c3e50;margin-bottom:4px;'
         f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{rank}. {stop.get("name","")}</div>'
-        f'{rating_html}{why_html}{quote_html}{badges_html}{hours_html}'
+        f'{rating_html}{why_html}{quote_html}{summary_html}{badges_html}{hours_html}'
         f'</div>'
     )
-    return _CARD_WRAP.format(img=img, body=body)
+    # Build full card: main row + optional photo strip
+    card_inner = (
+        f'<div style="display:flex;gap:12px;align-items:flex-start;">{img}{body}</div>'
+        f'{photo_strip_html}'
+    )
+    return (
+        f'<div style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;'
+        f'border:1px solid #e8ecef;border-radius:10px;padding:12px;margin-bottom:10px;'
+        f'background:#ffffff;box-shadow:0 1px 4px rgba(0,0,0,0.08);">'
+        f'{card_inner}</div>'
+    )
 
 
 def render_vector_card(result: dict, rank: int) -> str:
