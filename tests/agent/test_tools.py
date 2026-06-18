@@ -64,24 +64,24 @@ class TestEstimateVisitDuration:
 
 class TestFindCityPois:
     def test_returns_json_array(self):
-        with patch.object(_fcp_mod, "RouteKnowledgeGraph") as MockKG:
-            MockKG.return_value.get_pois_for_city.return_value = [_SF_POI]
+        with patch.object(_fcp_mod, "get_kg") as mock_get_kg:
+            mock_get_kg.return_value.get_pois_for_city.return_value = [_SF_POI]
             result = json.loads(find_city_pois_tool.invoke({"city": "San Francisco, CA", "categories": []}))
         assert isinstance(result, list)
         assert result[0]["name"] == "Alcatraz Island"
 
     def test_category_filter_applied(self):
         historic_poi = POI(name="Fort Point", category="historic", lat=37.81, lon=-122.47, osm_id="way/456")
-        with patch.object(_fcp_mod, "RouteKnowledgeGraph") as MockKG:
-            MockKG.return_value.get_pois_for_city.return_value = [_SF_POI, historic_poi]
+        with patch.object(_fcp_mod, "get_kg") as mock_get_kg:
+            mock_get_kg.return_value.get_pois_for_city.return_value = [_SF_POI, historic_poi]
             result = json.loads(find_city_pois_tool.invoke({"city": "San Francisco, CA", "categories": ["historic"]}))
         assert len(result) == 1
         assert result[0]["name"] == "Fort Point"
 
     def test_empty_categories_returns_all(self):
         historic_poi = POI(name="Fort Point", category="historic", lat=37.81, lon=-122.47, osm_id="way/456")
-        with patch.object(_fcp_mod, "RouteKnowledgeGraph") as MockKG:
-            MockKG.return_value.get_pois_for_city.return_value = [_SF_POI, historic_poi]
+        with patch.object(_fcp_mod, "get_kg") as mock_get_kg:
+            mock_get_kg.return_value.get_pois_for_city.return_value = [_SF_POI, historic_poi]
             result = json.loads(find_city_pois_tool.invoke({"city": "San Francisco, CA", "categories": []}))
         assert len(result) == 2
 
@@ -90,8 +90,8 @@ class TestFindCityPois:
             POI(name=f"POI {i}", category="tourism", lat=37.77, lon=-122.41, osm_id=f"way/{i}")
             for i in range(150)
         ]
-        with patch.object(_fcp_mod, "RouteKnowledgeGraph") as MockKG:
-            MockKG.return_value.get_pois_for_city.return_value = many_pois
+        with patch.object(_fcp_mod, "get_kg") as mock_get_kg:
+            mock_get_kg.return_value.get_pois_for_city.return_value = many_pois
             result = json.loads(find_city_pois_tool.invoke({"city": "San Francisco, CA", "categories": []}))
         assert len(result) == 100
 

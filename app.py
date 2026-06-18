@@ -318,9 +318,9 @@ _log("background init thread started — page renders now")
 
 @st.cache_resource
 def _load_day_trip_resources():
-    from routeiq.graph.knowledge_graph import RouteKnowledgeGraph
+    from routeiq.graph.knowledge_graph import get_kg
     from routeiq.agent import build_day_trip_graph
-    kg = RouteKnowledgeGraph()
+    kg = get_kg()
     graph = build_day_trip_graph()
     return kg, graph
 

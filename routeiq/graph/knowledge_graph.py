@@ -9,6 +9,16 @@ from routeiq.graph.poi import POI
 
 _POI_FIELDS = {f.name for f in dataclasses.fields(POI)}
 
+_shared_instance: "RouteKnowledgeGraph | None" = None
+
+
+def get_kg() -> "RouteKnowledgeGraph":
+    """Return the process-wide KG singleton so all callers share the same in-memory graph."""
+    global _shared_instance
+    if _shared_instance is None:
+        _shared_instance = RouteKnowledgeGraph()
+    return _shared_instance
+
 
 class RouteKnowledgeGraph:
     """Builds and queries a knowledge graph of Texas scenic route entities (Registry pattern).

@@ -4,7 +4,7 @@ import json
 
 from langchain_core.tools import tool
 
-from routeiq.graph.knowledge_graph import RouteKnowledgeGraph
+from routeiq.graph.knowledge_graph import get_kg
 
 
 @tool
@@ -22,7 +22,7 @@ def find_city_pois(city: str, categories: list[str]) -> str:
     Returns:
         JSON array of up to 100 POI dicts (name, category, lat, lon, osm_id, subtype, wikipedia_tag).
     """
-    pois = RouteKnowledgeGraph().get_pois_for_city(city)
+    pois = get_kg().get_pois_for_city(city)
 
     if categories:
         pois = [p for p in pois if p.category in categories]
