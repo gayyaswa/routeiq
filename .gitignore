@@ -19,3 +19,5 @@ cache/*.json
 day1_map.html
 .DS_Store
 .claude/
+docs/handoff-session-*.md
+logs/
