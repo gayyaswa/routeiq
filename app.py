@@ -414,8 +414,7 @@ def _run_dt_planning_thread(initial_state: dict, config: dict, graph, result_hol
             pass
         result_holder["status"] = "interrupted"
     except GraphInterrupt:
-        # interrupt_before=["review"] raises GraphInterrupt when the draft is ready —
-        # this is the expected success path, not an error.
+        # interrupt() inside _review raises GraphInterrupt — expected success path.
         result_holder["status"] = "interrupted"
     except Exception as exc:
         result_holder["status"] = "error"

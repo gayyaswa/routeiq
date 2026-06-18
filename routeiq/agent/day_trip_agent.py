@@ -437,4 +437,7 @@ def build_day_trip_graph() -> Any:
     builder.add_edge("narrate", "__end__")
 
     checkpointer = MemorySaver()
-    return builder.compile(checkpointer=checkpointer, interrupt_before=["review"])
+    # interrupt() inside _review is the canonical LangGraph 0.6.x pattern.
+    # interrupt_before=["review"] was removed because in 0.6.x it fires before
+    # the _plan checkpoint is committed, so get_state() sees draft_itinerary=None.
+    return builder.compile(checkpointer=checkpointer)
