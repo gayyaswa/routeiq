@@ -216,10 +216,14 @@ class TestScheduleStops:
         assert stops == []
         assert coords == []
 
-    def test_returns_original_on_geocode_failure(self):
+    def test_uses_stop_centroid_skips_geocode(self):
+        """geocode is never called when stops have valid coordinates."""
         stops = self._make_stops(2)
-        with patch("osmnx.geocode", side_effect=RuntimeError("network error")):
+        with patch("osmnx.geocode") as mock_geocode, \
+             patch("routeiq.graph.graph_loader.GraphLoader") as mock_gl:
+            mock_gl.return_value.load.side_effect = RuntimeError("no graph")
             result_stops, coords = _schedule_stops(stops, "9:00 AM", 8.0, "San Francisco, CA")
+        mock_geocode.assert_not_called()
         assert result_stops == stops
         assert coords == []
 

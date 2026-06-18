@@ -179,11 +179,17 @@ def _schedule_stops(
         start_min = _timestr_to_minutes(start_time) or 9 * 60.0
         budget_min = time_budget_hours * 60.0
 
-        # ox.geocode() returns Nominatim's representative point (urban core), not
-        # the polygon centroid — avoids offshore features like the Farallon Islands
-        # pulling SF's polygon centroid ~25 km into the Pacific.
-        lat, lon = ox.geocode(city)
-        logger.debug("schedule city=%r geocode_point=(%.4f,%.4f) bbox=N%.3f/S%.3f/E%.3f/W%.3f",
+        # Prefer stop centroid — coords come from OSM/Overpass via find_city_pois,
+        # not from the LLM, so they're always accurate regardless of KG state.
+        # Fall back to geocoding only when stops list is empty (shouldn't happen).
+        # Avoid bare ox.geocode(city): "Berkeley, CA" → British Columbia via Nominatim
+        # because "CA" is the ISO country code for Canada.
+        if stops:
+            lat = sum(s["lat"] for s in stops) / len(stops)
+            lon = sum(s["lon"] for s in stops) / len(stops)
+        else:
+            lat, lon = ox.geocode(city + ", USA")
+        logger.debug("schedule city=%r centroid=(%.4f,%.4f) bbox=N%.3f/S%.3f/E%.3f/W%.3f",
                      city, lat, lon, lat+0.15, lat-0.15, lon+0.15, lon-0.15)
 
         G = GraphLoader().load(
