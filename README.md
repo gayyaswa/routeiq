@@ -1,8 +1,9 @@
 # RouteIQ
 
-> Scenic route intelligence: ask a natural-language question, get a map with curated stops and an LLM-generated narrative — powered by Graph RAG over OSM road networks and Wikipedia. Swap the LLM provider with a single env var — no code changes required.
+> An agentic day-trip planner and scenic route explorer: describe a city or route in plain language, get a map-rendered, time-scheduled itinerary with real POI ratings, Wikipedia context, and a generated narrative — powered by a LangGraph ReAct agent, Graph RAG over OSM road networks, and a multi-source ratings layer.
 
-![App demo](docs/demo.gif)
+<!-- Run /generate-demo-gif to produce this -->
+<!-- ![App demo](docs/demo.gif) -->
 
 ---
 
@@ -24,164 +25,96 @@ streamlit run app.py
 | `LLM_MODEL` | `claude-sonnet-4-6` | Model name for the chosen provider |
 | `ANTHROPIC_API_KEY` | — | Required when `LLM_PROVIDER=anthropic` |
 | `NEBIUS_API_KEY` | — | Required when `LLM_PROVIDER=nebius` |
+| `NEBIUS_API_BASE` | — | Required when `LLM_PROVIDER=nebius` |
+| `RATING_PROVIDER` | `llm_synthetic` | `llm_synthetic` · `tripadvisor` · `foursquare` |
 
-> **Demo routes load instantly** — road network graphs and POI data for all 5 Bay Area demo corridors are bundled in the repo. Custom routes **inside the Bay Area** trigger a one-time OSMnx graph download (~30–60 s) and fast in-memory POI lookup. Routes **outside the Bay Area** (e.g. LA, Phoenix) must fetch both the road network and POIs live from Overpass (~1–4 min first run, then cached locally). See [Pre-seeding POI Cache for New Regions](#pre-seeding-poi-cache-for-new-regions) to avoid this delay.
-
----
-
-## Model Configuration
-
-All LangChain chains accept `BaseLanguageModel` — swapping providers requires only `.env` changes, no code changes. The active model is shown in the app caption on startup.
-
-Two models were tested and verified end-to-end:
+> **Bay Area cities load instantly** — road graphs, POI data, and rating caches for San Francisco, Oakland, Berkeley, San Jose, and Santa Cruz are bundled. Other cities trigger a one-time Overpass fetch (~15–30 s), then cache locally.
 
 ---
 
-### ✅ Claude Sonnet 4.6 (Anthropic) — default
+## What It Does
 
-```bash
-# .env
-LLM_PROVIDER=anthropic
-LLM_MODEL=claude-sonnet-4-6
-ANTHROPIC_API_KEY=sk-ant-...
-```
+**Tab 1 — Day Trip Planner (Agent):** Enter a city, pick interests, hours, and start time. A LangGraph ReAct agent calls five tools to find, rank, and enrich Points of Interest, then schedules them in road-time-accurate order using A\* pathfinding. A human-in-the-loop interrupt lets you review the draft map + stop cards, refine with natural language ("Add Lombard Street", "Skip museums"), and approve before the narrative is written.
 
-Get your key at [console.anthropic.com](https://console.anthropic.com).
+**Tab 2 — Route Planner (GraphRAG):** Ask a scenic route question ("Drive SF → Muir Woods, show redwoods and coastal views"). A LangGraph pipeline parses the query, loads the OSM road network, spatially joins POIs along the corridor, enriches them with Wikipedia, runs a 3-stage Graph RAG retrieval, and generates a streaming narrative with a Folium map and stop cards.
 
----
-
-### ✅ GPT-OSS 120B Fast (Nebius Token Factory)
-
-```bash
-# .env
-LLM_PROVIDER=nebius
-LLM_MODEL=openai/gpt-oss-120b-fast
-NEBIUS_API_KEY=v1....
-NEBIUS_API_BASE=https://api.tokenfactory.nebius.com/v1/
-```
-
-Get your key at [tokenfactory.nebius.com](https://tokenfactory.nebius.com). New accounts receive free credits. Other models (Qwen3, DeepSeek, Llama) also work — set `LLM_MODEL` to the model ID shown in your dashboard.
-
----
-
-The factory lives in [routeiq/llm_factory.py](routeiq/llm_factory.py). To add another OpenAI-compatible provider, add a branch there — no other files need to change.
-
----
-
-## What it does
-
-RouteIQ answers natural-language scenic route questions like *"Drive from San Francisco to Muir Woods, show redwoods and coastal views."* It loads the real road network from OpenStreetMap, finds the A\* shortest path, spatially joins points of interest within a 5 km corridor buffer, enriches them with Wikipedia descriptions, and runs a 3-stage Graph RAG pipeline (vector search → knowledge graph augmentation → context assembly) before asking an LLM to generate a streaming narrative. The result is an interactive Folium map with animated route, colour-coded stop markers, stop cards with Wikipedia images, and side-by-side GraphRAG vs. vector-only comparison.
+Both tabs support any city or route — Bay Area corridors are instant, other regions download on first use.
 
 ---
 
 ## Architecture
 
-### App layers
+### Day Trip Planner — Agent Flow
 
 ```mermaid
 flowchart TD
-    Q["Natural language query\n(e.g. SF → Monterey, coastal history)"]
-    subgraph Pipeline ["LangGraph Pipeline  (parse → graph → rag → narrate)"]
-        P["parse node\nClaude extracts origin / destination / preferences"]
-        G["graph node\nOSMnx geocode + road network load\nNetworkX A* shortest path\nPOIFinder spatial join (5 km buffer)\nDetourScorer + POISelector → top 5 POIs"]
-        R["rag node\nWikipedia enrichment (parallel)\nPOIChunker → ChromaDB\n3-stage KnowledgeRAG: vector → graph → context"]
-        N["narrate node\nClaude streaming narrative\n(tokens stream live to UI)"]
+    U["User: city · interests · hours · start time"]
+    subgraph Preflight ["Pre-flight (app.py)"]
+        K["KG warm-up: known_cities()\nIf new → Overpass fetch → add_city_pois()"]
     end
-    UI["Streamlit UI\nFolium map · Stop cards · GraphRAG vs Vector comparison"]
+    subgraph Agent ["LangGraph Agent (plan → review → narrate)"]
+        P["plan node — ReAct tool loop\n1. find_city_pois  (KG lookup)\n2. rate_pois  (quality ranking)\n3. enrich_poi_details  (Wikipedia)\n4. estimate_visit_duration\n5. search_poi_by_name  (on refine)\n→ structured extraction (Pydantic)\n→ _schedule_stops (A* road routing)"]
+        H["interrupt_before review\n── Human reviews draft ──\nApprove · Refine · Re-plan"]
+        N["narrate node\nGenerate trip narrative"]
+    end
+    UI["Map (AntPath) · Stop cards · Narrative"]
 
-    Q --> P --> G --> R --> N --> UI
+    U --> Preflight --> Agent
+    P --> H --> N --> UI
 
-    style Pipeline fill:#f0f4ff,stroke:#6b7280
+    style Agent fill:#f0f4ff,stroke:#6b7280
+    style Preflight fill:#fff7ed,stroke:#d97706
 ```
 
-### Request sequence
+### Route Planner — Pipeline Flow
 
 ```mermaid
-sequenceDiagram
-    actor User
-    participant App as app.py (Streamlit)
-    participant Facade as RouteIQFacade
-    participant Pipeline as RoutePipeline (LangGraph)
-    participant Claude as Claude Sonnet 4.6
-    participant OSM as OSMnx / Overpass
-    participant Wiki as Wikipedia API
-    participant Chroma as ChromaDB
-
-    User->>App: query + click "Find Scenic Stops"
-    App->>Facade: run(query)
-    Facade->>Pipeline: run(query)
-
-    Pipeline->>Claude: parse node — extract intent
-    Claude-->>Pipeline: {origin, destination, preferences}
-
-    Pipeline->>OSM: geocode + load road network (pickle cache)
-    OSM-->>Pipeline: NetworkX graph
-    Pipeline->>Pipeline: A* shortest path → RouteResult
-    Pipeline->>OSM: POI spatial join (5 km buffer, Overpass)
-    OSM-->>Pipeline: raw POIs
-    Pipeline->>Pipeline: DetourScorer → POISelector → top 5
-
-    Pipeline->>Wiki: enrich POIs (parallel, 5 threads)
-    Wiki-->>Pipeline: descriptions + image URLs
-    Pipeline->>Chroma: chunk + index POI text
-    Pipeline->>Chroma: 3-stage GraphRAG query
-    Chroma-->>Pipeline: enriched poi_context
-
-    Pipeline->>Claude: narrate node — streaming
-    loop per token
-        Claude-->>App: narrate_stream event → live placeholder
-    end
-    Claude-->>Pipeline: full narrative
-
-    Pipeline-->>App: PipelineState (route, pois, narrative)
-    App->>User: Folium map + stop cards + narrative
+flowchart LR
+    Q["NL query"] --> PA["parse\nClaude extracts\norigin / dest / prefs"]
+    PA --> G["graph\nOSMnx geocode\nA* path\nPOI spatial join\nDetour scoring"]
+    G --> R["rag\nWikipedia enrichment\nChromaDB 3-stage GraphRAG"]
+    R --> N["narrate\nClaude streaming"]
+    N --> UI["Map · Stop cards\nGraphRAG vs vector comparison"]
 ```
 
-### Module layout
+### Ratings Layer
+
+```
+rate_pois tool
+      │
+      ├─── TripAdvisorRatingProvider   (primary — key pending)
+      ├─── FoursquareRatingProvider    (secondary)
+      └─── LLMSyntheticRatingProvider  (active fallback — disk-cached, 21-day TTL)
+                │
+                ▼
+    composite_score = 0.4 × (rating/5) + 0.3 × log(reviews) + 0.3 × wikipedia_weight
+    Top 30 returned → LLM selects 8–10 matching user preferences
+```
+
+### Module Layout
 
 ```mermaid
 graph LR
     subgraph routeiq["routeiq/"]
-        F["facade.py — RouteIQFacade"]
-        PL["pipeline.py — RoutePipeline"]
-
-        subgraph SG["graph/"]
-            GL["graph_loader.py — OSMnx + pickle cache"]
-            RG["route_graph.py — NetworkX A*"]
-            PF["poi_finder.py — Overpass spatial join"]
-            KG["knowledge_graph.py — nx.DiGraph"]
-        end
-
-        subgraph SR["rag/"]
-            WF["wikipedia_fetcher.py"]
-            PI["poi_indexer.py — ChromaDB"]
-            PC["poi_chunker.py — chunk + index"]
-            KR["knowledge_rag.py — 3-stage GraphRAG"]
-            VB["vector_baseline.py — semantic baseline"]
-        end
-
-        subgraph ST["routing/"]
-            DS["detour_scorer.py — DetourScorer"]
-            PS["poi_selector.py — POISelector"]
-        end
-
-        subgraph SI["insights/"]
-            QP["query_parser.py — QueryParser"]
-            NC["narrative_chain.py — streaming"]
-            PR["prompts/ — versioned templates"]
-        end
-
-        subgraph SU["ui/"]
-            MB["map_builder.py — Folium"]
-            CR["card_renderer.py — stop cards"]
-        end
+        AG["agent/\nday_trip_agent.py\nagent_state.py\ntools/ (5 tools)"]
+        RT["ratings/\nbase.py · factory.py\ntripadvisor · foursquare · llm_synthetic"]
+        GR["graph/\ngraph_loader · route_graph\npoi_finder · knowledge_graph"]
+        RA["rag/\nwikipedia_fetcher · poi_indexer\nknowledge_rag · vector_baseline"]
+        RO["routing/\ndetour_scorer · poi_selector"]
+        IN["insights/\nquery_parser · narrative_chain\nprompts/ (versioned)"]
+        UI["ui/\nmap_builder · card_renderer"]
+        F["facade.py"]
+        PL["pipeline.py"]
     end
-
+    APP["app.py\nStreamlit UI\nTwo tabs"] --> AG
+    APP --> F
     F --> PL
-    PL --> SG
-    PL --> SR
-    PL --> ST
-    PL --> SI
+    PL --> GR
+    PL --> RA
+    PL --> RO
+    PL --> IN
+    AG --> RT
+    AG --> GR
 ```
 
 ---
@@ -190,45 +123,13 @@ graph LR
 
 | Pattern | Where |
 |---|---|
-| **Facade** | `RouteIQFacade` ([routeiq/facade.py](routeiq/facade.py)) — single entry point that wires all components; callers only need `facade.run(query)` |
-| **Pipeline** | `RoutePipeline` ([routeiq/pipeline.py](routeiq/pipeline.py)) and `KnowledgeRAG` ([routeiq/rag/knowledge_rag.py](routeiq/rag/knowledge_rag.py)) — named nodes, shared typed state, conditional edges |
-| **Strategy** | `DetourScorer` ([routeiq/routing/detour_scorer.py](routeiq/routing/detour_scorer.py)) — interchangeable scoring algorithm; `POISelector` applies category-aware selection |
-| **Registry** | `RouteKnowledgeGraph` ([routeiq/graph/knowledge_graph.py](routeiq/graph/knowledge_graph.py)) — typed node/edge graph of POI, City, Region, Category entities with LOCATED\_IN / HAS\_CATEGORY / NEAR\_POI edges |
-| **Builder** | `MapBuilder` ([routeiq/ui/map_builder.py](routeiq/ui/map_builder.py)) — assembles Folium map with AntPath route, colour-coded markers, and popups |
-| **Dependency Injection** | LLM (`ChatAnthropic`) and `ChromaDB` client injected into all AI components — every class is independently testable with mocks |
-
----
-
-## LangGraph Pipeline
-
-[routeiq/pipeline.py](routeiq/pipeline.py) implements the four-node state machine using LangGraph's `StateGraph`.
-
-**What LangGraph is:** a typed workflow engine for LLM pipelines. You define nodes (units of work), edges (routing), and one shared `TypedDict` state that every node reads from and writes to. `compile()` turns that definition into a single invokable graph — equivalent to AWS Step Functions but for LLM/tool call chains.
-
-**Graph topology:**
-
-```
-PipelineState (TypedDict — one shared DTO)
-  query · origin · destination · preferences
-  route_result · pois · top_pois · poi_context
-  narrative · error · fallback_reason
-
-parse ──[conditional]──▶ graph ──[conditional]──▶ rag ──▶ narrate ──▶ END
-          ↘ on error                ↘ on error
-           └─────────────────────────────────────▶ narrate (FallbackChain)
-```
-
-**What it adds over plain Python function calls:**
-
-| Plain Python | LangGraph |
-|---|---|
-| Error routing scattered across every caller | Any node sets `state["error"]` → conditional edge auto-routes to fallback |
-| Each function returns a dict; caller merges fields | All nodes share one typed `PipelineState` — no merge boilerplate |
-| Adding a step = refactoring the call chain | Add one node + one edge — existing nodes untouched |
-| Wiring (who calls who) is implicit in call order | Graph topology is explicit and auditable in `_build_graph()` |
-| LangSmith tracing requires manual instrumentation | Drop-in with `LANGCHAIN_TRACING_V2=true` |
-
-**Tradeoff:** For a strictly linear pipeline, LangGraph is slightly more ceremony than chaining functions. The payoff is in the conditional edges and extensibility — adding a caching node, a retry loop, or a human-review gate between any two steps is one `add_node` + one `add_edge` call.
+| **Pipeline** | `RoutePipeline` ([routeiq/pipeline.py](routeiq/pipeline.py)) — LangGraph state machine: parse → graph → rag → narrate with conditional edges. `DayTripAgent` — plan → review → narrate with `interrupt_before`. |
+| **Strategy** | `POIRatingProvider` ABC ([routeiq/ratings/base.py](routeiq/ratings/base.py)) — `TripAdvisorRatingProvider`, `FoursquareRatingProvider`, `LLMSyntheticRatingProvider` are interchangeable via `RATING_PROVIDER` env var. `DetourScorer` ([routeiq/routing/detour_scorer.py](routeiq/routing/detour_scorer.py)) — swappable scoring algorithm. |
+| **Factory** | `RatingsFactory` ([routeiq/ratings/factory.py](routeiq/ratings/factory.py)) — constructs the active rating provider from env var. |
+| **Facade** | `RouteIQFacade` ([routeiq/facade.py](routeiq/facade.py)) — single entry point for the Route Planner; callers only need `facade.run(query)`. |
+| **Registry** | `RouteKnowledgeGraph` ([routeiq/graph/knowledge_graph.py](routeiq/graph/knowledge_graph.py)) — typed node/edge graph of POI, City, Region, Category with LOCATED\_IN / HAS\_CATEGORY / NEAR\_POI edges. `get_kg()` singleton ensures all callers share one in-memory graph. |
+| **Builder** | `MapBuilder` ([routeiq/ui/map_builder.py](routeiq/ui/map_builder.py)) — assembles Folium map with AntPath route, numbered markers, and stop popups. |
+| **Dependency Injection** | LLM (`ChatAnthropic` / `ChatOpenAI`) injected into all AI components — every class is independently testable with mocks. |
 
 ---
 
@@ -238,187 +139,99 @@ parse ──[conditional]──▶ graph ──[conditional]──▶ rag ──
 python3 -m pytest tests/ -v
 ```
 
-**127 tests, 16 test files** — one per module. Coverage includes:
+**213 tests across 22 test files.** Coverage includes:
 
-| Area | Tests |
+| Area | Test files |
 |---|---|
-| Graph loading + pickle cache migration | `test_graph_loader.py` |
+| Day Trip Agent — scheduling, budget trimming, ReAct loop | `tests/agent/test_day_trip_agent.py` |
+| Agent tools — find POIs, rate, enrich, search by name | `tests/agent/test_tools.py` |
+| Ratings — TripAdvisor, Foursquare, LLM synthetic, factory | `tests/ratings/` (4 files) |
+| Graph loading + pickle cache | `test_graph_loader.py` |
 | A\* pathfinding | `test_route_graph.py` |
 | POI spatial join | `test_poi_finder.py` |
-| Knowledge graph edges + enrichment | `test_knowledge_graph.py` |
+| Knowledge graph — edges, enrichment, city expansion | `test_knowledge_graph.py` |
 | Detour scoring + POI selection | `test_detour_scorer.py`, `test_poi_selector.py` |
 | Wikipedia fetch + enrichment | `test_wikipedia_fetcher.py` |
 | ChromaDB indexing + retrieval | `test_poi_indexer.py`, `test_poi_retriever.py` |
-| POI chunking | `test_poi_chunker.py` |
 | 3-stage GraphRAG pipeline | `test_knowledge_rag.py` |
-| Query parser (Claude, mocked) | `test_query_parser.py` |
-| Narrative chain — generate + stream | `test_narrative_chain.py` |
+| Query parser, narrative chain, fallback | `test_query_parser.py`, `test_narrative_chain.py`, `test_fallback_chain.py` |
 | LangGraph pipeline nodes + edges | `test_pipeline.py` |
 | Vector baseline | `test_vector_baseline.py` |
-| Fallback chain | `test_fallback_chain.py` |
-
----
-
-## Evaluation
-
-Runs a 10-query comparison of GraphRAG vs. vector-only baseline and saves results to `eval/results.md`.
-
-```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-python3 eval/run_eval.py
-```
-
-**Requirements:** `ANTHROPIC_API_KEY` · ~15 min runtime · ~$0.05–0.10 API cost (6 LLM calls for route queries)
-
-**What it does:**
-- Runs 6 route queries through the full GraphRAG pipeline
-- Runs all 10 queries through the vector baseline (95 notable Bay Area POIs, Wikipedia-enriched)
-- Compares POI overlap and uniqueness, determines winner per query
-- Prints a results table and saves `eval/results.md`
-
-**Vector baseline seed:** `eval/evaluator.py` loads 95 OSM-verified notable Bay Area landmarks
-from `cache/pois/bay_area_all.json.gz` (wikipedia-tagged POIs only) and Wikipedia-enriches
-them at startup. To regenerate the master POI file:
-
-```bash
-python3 scripts/seed_poi_cache.py           # bootstrap from existing per-route caches
-python3 scripts/seed_poi_cache.py --tiles   # full 4-tile Overpass fetch (~3-5 min)
-```
-
-**Latest results:** See [eval/results.md](eval/results.md) — GraphRAG wins 6/6 route queries,
-vector wins 4/4 semantic queries, 10/10 prediction accuracy.
-
----
-
-## Pre-seeding POI Cache for New Regions
-
-### Why out-of-area routes are slow
-
-Every query goes through a 3-path POI lookup in [routeiq/graph/poi_finder.py](routeiq/graph/poi_finder.py):
-
-| Path | What it checks | Result for Bay Area | Result for LA / Phoenix / etc. |
-|---|---|---|---|
-| 1 — master file | `cache/pois/bay_area_all.json.gz` — 984 POIs, in-memory spatial filter | Instant (~0.1 s) | 0 hits → falls through |
-| 2 — per-route cache | `cache/pois/pois_n*.json.gz` for this exact bounding box | Instant if previously run | No file → falls through |
-| 3 — live Overpass | 4 mirrors × 30 s timeout each | Never reached | Up to **120 s** before error |
-
-Additionally, the road network graph (OSMnx) is also fetched live for uncached regions on the same first run. For a dense urban area like Hollywood → Beverly Hills, Overpass must scan a large bounding box with thousands of features — compounding the delay.
-
-**After the first successful run**, the per-route cache file is written to `cache/pois/` automatically. Subsequent queries for the same corridor are instant.
-
----
-
-### Option 1 — Let it auto-cache on first run (simplest)
-
-Just run the query. It will be slow the first time (~1–4 min depending on Overpass load), then instant on every subsequent run. The cache file is written to `cache/pois/pois_n<bbox>.json.gz` automatically.
-
-To share that cache with others, commit the file:
-
-```bash
-git add cache/pois/pois_n<bbox>.json.gz
-git commit -m "chore: add POI cache for <region> corridor"
-```
-
----
-
-### Option 2 — Extend the seed script for a new region
-
-For broader coverage (any route within a region, not just one corridor), adapt `scripts/seed_poi_cache.py` to fetch a new set of geographic tiles:
-
-**Step 1 — Identify your bounding box**
-
-Use [bboxfinder.com](https://bboxfinder.com) to draw a box around the region, then note `west, south, east, north`.
-
-**Step 2 — Edit the tile list in the script**
-
-```python
-# scripts/seed_poi_cache.py — _BAY_AREA_TILES equivalent for your region
-_LA_TILES = [
-    # (name,               west,     south,   east,    north)
-    ("LA Basin + Hollywood", -118.55,  33.90, -118.10,  34.20),
-    ("Beverly Hills + Malibu", -118.70, 33.95, -118.35, 34.15),
-]
-```
-
-Each tile should be small enough to finish in under 90 s on Overpass (roughly 0.5° × 0.5° for dense urban areas, larger for rural).
-
-**Step 3 — Run the tile fetch**
-
-```bash
-python3 scripts/seed_poi_cache.py --tiles
-```
-
-This queries Overpass for each tile (3–5 min total), deduplicates by OSM ID, and writes the master file.
-
-**Step 4 — Update POIFinder to recognise the new master file**
-
-In [routeiq/graph/poi_finder.py](routeiq/graph/poi_finder.py), `_MASTER_FILE` is currently hardcoded to `bay_area_all.json.gz`. For multi-region support, you would either:
-- Maintain one large master file covering all regions (merge the files)
-- Or add a second master path and a geographic check before falling through to Overpass
-
-**Step 5 — Commit the cache**
-
-```bash
-git add cache/pois/<region>_all.json.gz
-git commit -m "chore: add POI master cache for <region>"
-```
-
----
-
-### Current coverage
-
-| Region | Master cache file | Routes covered |
-|---|---|---|
-| Bay Area | `cache/pois/bay_area_all.json.gz` | All 5 demo routes + any Bay Area corridor |
-| All others | Per-route `cache/pois/pois_n*.json.gz` (auto-generated, not committed) | Only previously run corridors |
 
 ---
 
 ## Project Structure
 
 ```
+app.py                        Streamlit UI — Day Trip Planner + Route Planner tabs
 routeiq/
+  agent/
+    day_trip_agent.py         LangGraph ReAct agent — plan / review (interrupt) / narrate nodes
+    agent_state.py            DayTripState TypedDict
+    tools/
+      find_city_pois.py       READ: KG lookup — returns POIs for a city
+      rate_pois.py            READ: enriches POIs with ratings, ranks by composite score
+      enrich_poi_details.py   READ: Wikipedia intro + thumbnail per POI
+      estimate_visit.py       READ: typical visit duration by OSM subtype
+      search_poi_by_name.py   READ: Nominatim geocoder — resolves named places to lat/lon
+  ratings/
+    base.py                   POIRatingProvider ABC + RatedPOI dataclass
+    factory.py                RatingsFactory — selects provider from RATING_PROVIDER env var
+    llm_synthetic.py          LLM-generated ratings, disk-cached per city, 21-day TTL
+    tripadvisor.py            TripAdvisor Terra API adapter
+    foursquare.py             Foursquare v2 adapter
   graph/
-    graph_loader.py       OSMnx road network download + pickle cache (auto-migrates .graphml)
-    route_graph.py        NetworkX A* shortest path
-    poi_finder.py         Overpass POI query + 5 km corridor spatial join
-    knowledge_graph.py    nx.DiGraph of POI/City/Region/Category entities
-    knowledge_graph_data.py  Seed data for Bay Area nodes and relationships
-    poi.py                POI dataclass (name, category, lat/lon, description, image_url)
-    route_result.py       RouteResult dataclass (coords, length_km, drive_time_min)
+    knowledge_graph.py        nx.DiGraph of POI/City/Region/Category; get_kg() singleton
+    knowledge_graph_data.py   Bay Area seed data
+    graph_loader.py           OSMnx road network download + pickle cache
+    route_graph.py            NetworkX A* shortest path
+    poi_finder.py             Overpass POI query + corridor spatial join + polygon clip
+    poi.py                    POI dataclass
+    route_result.py           RouteResult dataclass
   rag/
-    wikipedia_fetcher.py  Wikipedia intro + thumbnail URL per POI (15 s timeout)
-    poi_indexer.py        ChromaDB collection management + upsert
-    poi_chunker.py        Splits POI descriptions into sentence-level chunks for indexing
-    knowledge_rag.py      3-stage GraphRAG: vector search → graph augment → context string
-    poi_retriever.py      Semantic retrieval by POI ID
-    vector_baseline.py    Pure semantic baseline (no graph) for evaluation comparison
+    wikipedia_fetcher.py      Wikipedia intro + thumbnail URL per POI
+    poi_indexer.py            ChromaDB collection management
+    knowledge_rag.py          3-stage GraphRAG: vector → graph augment → context
+    vector_baseline.py        Pure semantic baseline (no graph) for evaluation
   routing/
-    detour_scorer.py      Straight-line round-trip detour cost per POI (Strategy)
-    poi_selector.py       Top-N selection with category preference weighting
-    scored_poi.py         ScoredPOI dataclass (POI + detour_min + score)
+    detour_scorer.py          Straight-line detour cost per POI (Strategy)
+    poi_selector.py           Top-N selection with category weighting
   insights/
-    query_parser.py       NL query → {origin, destination, preferences} via Claude
-    narrative_chain.py    Route + POIs → streaming narrative via Claude
-    fallback_chain.py     Error/no-result graceful response
-    prompts/              Versioned ChatPromptTemplates (QUERY_PARSER_PROMPT, NARRATIVE_PROMPT_V3)
-    examples/             Few-shot examples as plain dicts
+    query_parser.py           NL query → {origin, destination, preferences}
+    narrative_chain.py        Route + POIs → streaming narrative
+    prompts/                  Versioned ChatPromptTemplates
   ui/
-    map_builder.py        Folium map with AntPath route + CircleMarker POIs (Builder)
-    card_renderer.py      Stop card HTML (name, detour, Wikipedia image, description)
-  facade.py               RouteIQFacade — single DI entry point
-  pipeline.py             RoutePipeline — LangGraph state machine
-app.py                    Streamlit UI (deferred imports, bg init, streaming placeholder)
+    map_builder.py            Folium map with AntPath route + markers (Builder)
+    card_renderer.py          Stop card HTML — photos, ratings, visitor quote, hours
+  facade.py                   RouteIQFacade — single DI entry point (Route Planner)
+  pipeline.py                 RoutePipeline — LangGraph state machine (Route Planner)
+  llm_factory.py              create_llm() — Anthropic / Nebius via env var
+cache/
+  graphs/                     OSMnx road network pickles (Bay Area pre-seeded)
+  pois/                       POI JSON.GZ caches (bay_area_all.json.gz + per-route)
+  ratings/                    LLM synthetic rating caches per city
+  chroma/                     ChromaDB persistent store (pre-populated)
 eval/
-  evaluator.py            10-query GraphRAG vs vector baseline evaluation harness
-  eval_queries.py         Bay Area query set
-  run_eval.py             CLI runner
-tests/                    124 unit tests
-docs/                     Architecture decisions, learnings log
-prompts.md                Running log of all prompts used in development
-requirements.txt          Python dependencies
-restart.sh                Cache-safe restart (preserves graph + POI cache)
+  evaluator.py                10-query GraphRAG vs vector baseline harness
+  run_eval.py                 CLI runner
+tests/                        213 unit tests across 22 files
+docs/
+  README-routeplanner.md      Full Route Planner documentation
+  week3-submission.md         Week 3 agent framework + prompts + learnings
 ```
+
+---
+
+## Evaluation
+
+10-query comparison of Graph RAG vs. vector-only retrieval for the Route Planner:
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+python3 eval/run_eval.py
+```
+
+Results: GraphRAG wins 6/6 route queries, vector wins 4/4 semantic queries — **10/10 prediction accuracy**. Full results in [eval/results.md](eval/results.md).
 
 ---
 
@@ -426,11 +239,11 @@ restart.sh                Cache-safe restart (preserves graph + POI cache)
 
 | File | Contents |
 |---|---|
-| [docs/learnings.md](docs/learnings.md) | Key learnings across all sessions — graph retrieval vs. vector, performance wins, design decisions |
-| [docs/Architecture-and-Design-Decisions.md](docs/Architecture-and-Design-Decisions.md) | Full architecture rationale and design choices |
-| [docs/RAG-and-GraphRAG-Explained.md](docs/RAG-and-GraphRAG-Explained.md) | Plain-English explanation of the GraphRAG approach |
-| [prompts.md](prompts.md) | Every prompt iteration with what changed and why |
+| [docs/README-routeplanner.md](docs/README-routeplanner.md) | Full Route Planner architecture, sequence diagrams, pre-seeding guide |
+| [docs/week3-submission.md](docs/week3-submission.md) | Week 3 agent framework, all prompts, iterations, learnings |
+| [docs/Architecture-and-Design-Decisions.md](docs/Architecture-and-Design-Decisions.md) | Full architecture rationale across all weeks |
+| [prompts.md](prompts.md) | Running log of every prompt iteration — what changed and why |
 
 ---
 
-Built with [OSMnx](https://osmnx.readthedocs.io) · [NetworkX](https://networkx.org) · [LangGraph](https://langchain-ai.github.io/langgraph/) · [ChromaDB](https://docs.trychroma.com) · [LangChain](https://python.langchain.com) · [Claude Sonnet 4.6](https://anthropic.com) · [Folium](https://python-visualization.github.io/folium/) · [Streamlit](https://streamlit.io)
+Built with [LangGraph](https://langchain-ai.github.io/langgraph/) · [LangChain](https://python.langchain.com) · [OSMnx](https://osmnx.readthedocs.io) · [NetworkX](https://networkx.org) · [ChromaDB](https://docs.trychroma.com) · [Streamlit](https://streamlit.io) · [Folium](https://python-visualization.github.io/folium/) · [Claude Sonnet 4.6](https://anthropic.com) · [Nebius Token Factory](https://tokenfactory.nebius.com)
