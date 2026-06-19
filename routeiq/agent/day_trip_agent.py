@@ -313,7 +313,7 @@ def _plan(state: DayTripState, config: Optional[RunnableConfig] = None) -> dict:
     """ReAct tool loop, then a structured-output call to extract the validated itinerary."""
     t0 = time.perf_counter()
     thread_id: str = ((config or {}).get("configurable") or {}).get("thread_id", "")
-    print(f"[dt_agent] _plan start city={state['city']}", flush=True)
+    logger.debug("_plan start city=%s", state["city"])
     llm = create_llm()
     llm_with_tools = llm.bind_tools(ALL_TOOLS)
 
@@ -336,11 +336,11 @@ def _plan(state: DayTripState, config: Optional[RunnableConfig] = None) -> dict:
         messages.append(response)
 
         if not response.tool_calls:
-            print(f"[dt_agent] ReAct loop: iter={iteration} no tool calls → stopping", flush=True)
+            logger.debug("ReAct loop iter=%d no tool calls → stopping", iteration)
             break
 
         tool_names = [tc["name"] for tc in response.tool_calls]
-        print(f"[dt_agent] ReAct loop: iter={iteration} tools={tool_names}", flush=True)
+        logger.debug("ReAct loop iter=%d tools=%s", iteration, tool_names)
 
         # Emit progress for the first tool in each iteration
         if thread_id and tool_names:
@@ -351,23 +351,48 @@ def _plan(state: DayTripState, config: Optional[RunnableConfig] = None) -> dict:
         for tc in response.tool_calls:
             messages.append(_execute_tool(tc))
 
-    # Phase 2 — Structured extraction: the full conversation becomes context for a
-    # validated Pydantic parse. This guarantees all fields are present and typed correctly.
+    # Phase 2 — Structured extraction: build a FRESH prompt from tool results only.
+    # Sending the full conversation (with the "Output JSON only" system instruction)
+    # conflicts with with_structured_output's tool-calling mode on Nebius, causing
+    # the model to return a raw JSON stub without the stops array.
     if thread_id:
         _emit_progress(thread_id, "extract", "Structuring itinerary…")
 
-    structured_llm = llm.with_structured_output(DayTripItinerary)
-    extraction_prompt = (
-        "Based on all the tool results above, produce the final day trip itinerary "
-        "for " + state["city"] + ". Follow all faithfulness rules: visitor_quote from "
-        "review snippets, visitor_summary synthesizing visitor sentiment, why_visit from "
-        "Wikipedia only, activities grounded in Wikipedia and reviews. "
-        "CRITICAL: copy lat, lon, photo_urls, rating, review_count, review_source, and hours "
-        "EXACTLY from find_city_pois / rate_pois tool output — do not invent or modify these values."
-    )
-    itinerary: DayTripItinerary = structured_llm.invoke(
-        messages + [HumanMessage(content=extraction_prompt)]
-    )
+    tool_context = "\n\n---\n\n".join(
+        msg.content for msg in messages if isinstance(msg, ToolMessage)
+    ) or "No tool results available."
+
+    extraction_messages = [
+        HumanMessage(content=(
+            f"Extract a structured day trip itinerary from these tool results.\n\n"
+            f"Trip: {state['time_budget_hours']}-hour day in {state['city']} "
+            f"starting at {state['start_time']}. "
+            f"Preferences: {', '.join(state['preferences']) or 'any'}.\n\n"
+            f"=== TOOL RESULTS ===\n{tool_context}\n=== END TOOL RESULTS ===\n\n"
+            f"Rules:\n"
+            f"- Include 8-10 stops matching the preferences.\n"
+            f"- visitor_quote: the single most vivid snippet from all_snippets, "
+            f"prefixed with the review_source name.\n"
+            f"- visitor_summary: 1-2 sentences synthesising overall sentiment from all_snippets.\n"
+            f"- why_visit: one factual sentence from the Wikipedia description only.\n"
+            f"- activities: derived from Wikipedia and review snippets only.\n"
+            f"- Copy lat, lon, photo_urls, rating, review_count, review_source, and hours "
+            f"EXACTLY from the tool output — do not invent or modify these values.\n"
+            f"- Set arrival_time and departure_time to 'TBD' (scheduling is done automatically).\n"
+            f"- Use 'today' as the date value."
+        ))
+    ]
+
+    itinerary: DayTripItinerary | None = None
+    for _attempt in range(2):
+        try:
+            structured_llm = llm.with_structured_output(DayTripItinerary)
+            itinerary = structured_llm.invoke(extraction_messages)
+            break
+        except Exception as _exc:
+            logger.warning("Structured extraction attempt %d failed: %s", _attempt + 1, _exc)
+            if _attempt == 1:
+                raise
     itinerary_dict = itinerary.model_dump()
 
     if thread_id:
@@ -388,7 +413,7 @@ def _plan(state: DayTripState, config: Optional[RunnableConfig] = None) -> dict:
 
     itinerary_dict["stops"] = scheduled_stops
 
-    print(f"[dt_agent] _plan done in {time.perf_counter()-t0:.1f}s — {len(scheduled_stops)} stops", flush=True)
+    logger.debug("_plan done in %.1fs — %d stops", time.perf_counter() - t0, len(scheduled_stops))
     return {"messages": messages, "draft_itinerary": itinerary_dict, "route_coords": route_coords}
 
 

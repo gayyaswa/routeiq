@@ -38,6 +38,7 @@ _fh.setLevel(logging.DEBUG)
 _fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)-8s %(name)s — %(message)s", datefmt="%H:%M:%S"))
 logging.getLogger("routeiq").addHandler(_fh)
 logging.getLogger("routeiq").setLevel(logging.DEBUG)
+_logger = logging.getLogger("routeiq.app")
 _log("import: routeiq.ui.card_renderer")
 from routeiq.ui.card_renderer import render_stop_card, render_vector_card, render_dt_card, IMAGE_MODAL_HTML
 _log("imports: light done")
@@ -410,15 +411,20 @@ def _render_dt_map(stops: list, route_coords: list, height: int = 340):
 def _run_dt_planning_thread(initial_state: dict, config: dict, graph, result_holder: dict) -> None:
     from langgraph.errors import GraphInterrupt
     try:
-        for _ in graph.stream(initial_state, config=config):
-            pass
+        chunk_count = 0
+        for chunk in graph.stream(initial_state, config=config):
+            chunk_count += 1
+            _logger.debug("dt_plan_thread chunk #%d: %s", chunk_count, list(chunk.keys()))
+        _logger.debug("dt_plan_thread stream exhausted normally after %d chunks", chunk_count)
         result_holder["status"] = "interrupted"
-    except GraphInterrupt:
-        # interrupt() inside _review raises GraphInterrupt — expected success path.
+    except GraphInterrupt as gi:
+        _logger.debug("dt_plan_thread GraphInterrupt: %s", gi)
         result_holder["status"] = "interrupted"
     except Exception as exc:
+        _logger.exception("dt_plan_thread EXCEPTION: %s", exc)
         result_holder["status"] = "error"
         result_holder["error"] = str(exc)
+    _logger.debug("dt_plan_thread final status=%s", result_holder.get("status"))
 
 
 def _run_dt_narrate_thread(config: dict, graph, result_holder: dict) -> None:
@@ -572,12 +578,18 @@ with tab1:
         thread.start()
         st.rerun()
 
+    # Single container for all phase-specific content — Streamlit replaces it
+    # atomically on phase transitions, preventing old iframe components from
+    # lingering in the DOM while new content loads.
+    _dt_area = st.empty()
+
     # ── Planning poll ─────────────────────────────────────────────────────────
 
     if dt_phase == "planning":
-        dt_progress = st.session_state.get("dt_progress", {})
-        _dt_stepper_ph = st.empty()
-        _dt_stepper_ph.markdown(_render_stepper(dt_progress, steps=_DT_STEPS), unsafe_allow_html=True)
+        with _dt_area.container():
+            dt_progress = st.session_state.get("dt_progress", {})
+            _dt_stepper_ph = st.empty()
+            _dt_stepper_ph.markdown(_render_stepper(dt_progress, steps=_DT_STEPS), unsafe_allow_html=True)
 
         thread = st.session_state.get("dt_thread")
         if thread and thread.is_alive():
@@ -589,10 +601,17 @@ with tab1:
             _dt_unreg(st.session_state.get("dt_progress_thread_id", ""))
 
             rh = st.session_state.get("dt_result_holder", {})
+            _logger.debug("dt_poll thread done — status=%s error=%s", rh.get("status"), rh.get("error"))
             if rh.get("status") == "interrupted":
                 _, dt_graph = _load_day_trip_resources()
                 config = {"configurable": {"thread_id": st.session_state["dt_thread_id"]}}
                 snapshot = dt_graph.get_state(config)
+                _logger.debug("dt_poll snapshot.next=%s", snapshot.next)
+                _logger.debug("dt_poll snapshot.values keys=%s", list(snapshot.values.keys()))
+                _logger.debug("dt_poll draft_itinerary present=%s", snapshot.values.get("draft_itinerary") is not None)
+                if snapshot.values.get("draft_itinerary"):
+                    stops = snapshot.values["draft_itinerary"].get("stops") or []
+                    _logger.debug("dt_poll stops count=%d", len(stops))
                 draft = snapshot.values.get("draft_itinerary")
                 if draft:
                     st.session_state["dt_draft"] = draft
@@ -600,140 +619,143 @@ with tab1:
                     st.session_state["dt_phase"] = "draft_ready"
                 else:
                     st.session_state["dt_phase"] = "idle"
+                    _dt_area.empty()
                     st.error("Agent did not produce a draft. Try again.")
             else:
                 st.session_state["dt_phase"] = "idle"
+                _dt_area.empty()
                 st.error(f"Planning error: {rh.get('error', 'unknown')}")
             st.rerun()
 
-    # ── Draft ready — map + cards + approve/refine ────────────────────────────
+    # ── Draft ready / narrating — map + cards + approve/refine/poll ─────────────
 
-    if dt_phase in ("draft_ready", "narrating"):
-        draft = st.session_state.get("dt_draft") or {}
-        stops = draft.get("stops") or []
+    elif dt_phase in ("draft_ready", "narrating"):
+        with _dt_area.container():
+            draft = st.session_state.get("dt_draft") or {}
+            stops = draft.get("stops") or []
 
-        if stops:
-            city_val = st.session_state.get("dt_city_val", dt_city)
-            hours_val = st.session_state.get("dt_hours_val", dt_hours)
-            st.markdown(
-                f"**Draft itinerary — {city_val} · {hours_val}h · {len(stops)} stops**"
-            )
-            route_coords_draft = st.session_state.get("dt_route_coords") or []
-            m_draft = _render_dt_map(stops, route_coords_draft, height=300)
-            st_folium(m_draft, height=300, use_container_width=True, returned_objects=[])
-
-            cards_html = (
-                '<div style="max-height:420px;overflow-y:auto;padding-right:6px;">'
-                + "".join(render_dt_card(s, i) for i, s in enumerate(stops, 1))
-                + "</div>"
-                + IMAGE_MODAL_HTML
-            )
-            st.components.v1.html(cards_html, height=430, scrolling=False)
-
-        # Approve / Refine row (only when waiting for decision)
-        if dt_phase == "draft_ready":
-            ap_col, rf_col = st.columns([1, 2])
-            with ap_col:
-                if st.button("✅ Approve & Generate Narrative", type="primary", key="dt_approve"):
-                    _, dt_graph = _load_day_trip_resources()
-                    config = {"configurable": {"thread_id": st.session_state["dt_thread_id"]}}
-                    rh2: dict = {}
-                    st.session_state["dt_result_holder"] = rh2
-                    st.session_state["dt_phase"] = "narrating"
-                    t = threading.Thread(
-                        target=_run_dt_narrate_thread,
-                        args=(config, dt_graph, rh2), daemon=True
-                    )
-                    st.session_state["dt_thread"] = t
-                    t.start()
-                    st.rerun()
-
-            with rf_col:
-                feedback_text = st.text_input(
-                    "Feedback", placeholder="e.g. Add more outdoor stops, no museums",
-                    key="dt_feedback_input", label_visibility="collapsed"
+            if stops:
+                city_val = st.session_state.get("dt_city_val", dt_city)
+                hours_val = st.session_state.get("dt_hours_val", dt_hours)
+                st.markdown(
+                    f"**Draft itinerary — {city_val} · {hours_val}h · {len(stops)} stops**"
                 )
-                st.caption(
-                    "💡 Try: &nbsp;"
-                    "**Add Lombard Street** · "
-                    "**Skip museums** · "
-                    "**More nature spots** · "
-                    "**Start at 10 AM** · "
-                    "**Fewer stops** · "
-                    "**Include the Ferry Building**"
-                )
-                if st.button("🔄 Refine", key="dt_refine") and feedback_text.strip():
-                    _, dt_graph = _load_day_trip_resources()
-                    refine_tid = st.session_state["dt_thread_id"]
-                    config = {"configurable": {"thread_id": refine_tid}}
-                    rh3: dict = {}
-                    dt_progress3: dict = {"current": None, "done": set(), "subtask": ""}
-                    from routeiq.agent.day_trip_agent import register_progress as _dt_register3
-                    _dt_register3(refine_tid, dt_progress3)
-                    st.session_state["dt_result_holder"] = rh3
-                    st.session_state["dt_progress"] = dt_progress3
-                    st.session_state["dt_progress_thread_id"] = refine_tid
-                    st.session_state["dt_phase"] = "planning"
-                    t = threading.Thread(
-                        target=_run_dt_refine_thread,
-                        args=(feedback_text.strip(), config, dt_graph, rh3), daemon=True
-                    )
-                    st.session_state["dt_thread"] = t
-                    t.start()
-                    st.rerun()
+                route_coords_draft = st.session_state.get("dt_route_coords") or []
+                m_draft = _render_dt_map(stops, route_coords_draft, height=300)
+                st_folium(m_draft, height=300, use_container_width=True, returned_objects=[])
 
-    # ── Narrating poll ────────────────────────────────────────────────────────
-
-    if dt_phase == "narrating":
-        st.info("✍️ Writing your narrative…")
-        thread = st.session_state.get("dt_thread")
-        if thread and thread.is_alive():
-            time.sleep(0.5)
-            st.rerun()
-        else:
-            rh = st.session_state.get("dt_result_holder", {})
-            if rh.get("status") == "done":
-                st.session_state["dt_narrative"] = rh.get("narrative")
-                if rh.get("draft"):
-                    st.session_state["dt_draft"] = rh["draft"]
-                if rh.get("route_coords"):
-                    st.session_state["dt_route_coords"] = rh["route_coords"]
-                st.session_state["dt_phase"] = "done"
-            else:
-                st.session_state["dt_phase"] = "draft_ready"
-                st.error(f"Narration error: {rh.get('error', 'unknown')}")
-            st.rerun()
-
-    # ── Done — map + cards + narrative ───────────────────────────────────────
-
-    if dt_phase == "done":
-        draft = st.session_state.get("dt_draft") or {}
-        stops = draft.get("stops") or []
-        route_coords = st.session_state.get("dt_route_coords") or []
-        city_val = st.session_state.get("dt_city_val", "")
-        hours_val = st.session_state.get("dt_hours_val", "")
-
-        if stops:
-            st.markdown(f"**{city_val} · {hours_val}h · {len(stops)} stops**")
-            map_col, cards_col = st.columns([3, 2])
-
-            with map_col:
-                m_done = _render_dt_map(stops, route_coords, height=480)
-                st_folium(m_done, height=480, use_container_width=True, returned_objects=[])
-
-            with cards_col:
                 cards_html = (
-                    '<div style="max-height:480px;overflow-y:auto;padding-right:6px;">'
+                    '<div style="max-height:420px;overflow-y:auto;padding-right:6px;">'
                     + "".join(render_dt_card(s, i) for i, s in enumerate(stops, 1))
                     + "</div>"
                     + IMAGE_MODAL_HTML
                 )
-                st.components.v1.html(cards_html, height=490, scrolling=False)
+                st.components.v1.html(cards_html, height=430, scrolling=False)
 
-        narrative = st.session_state.get("dt_narrative") or ""
-        if narrative:
-            with st.expander("Trip narrative", expanded=True):
-                st.markdown(narrative)
+            if dt_phase == "draft_ready":
+                # Approve / Refine row
+                ap_col, rf_col = st.columns([1, 2])
+                with ap_col:
+                    if st.button("✅ Approve & Generate Narrative", type="primary", key="dt_approve"):
+                        _, dt_graph = _load_day_trip_resources()
+                        config = {"configurable": {"thread_id": st.session_state["dt_thread_id"]}}
+                        rh2: dict = {}
+                        st.session_state["dt_result_holder"] = rh2
+                        st.session_state["dt_phase"] = "narrating"
+                        t = threading.Thread(
+                            target=_run_dt_narrate_thread,
+                            args=(config, dt_graph, rh2), daemon=True
+                        )
+                        st.session_state["dt_thread"] = t
+                        t.start()
+                        st.rerun()
+
+                with rf_col:
+                    feedback_text = st.text_input(
+                        "Feedback", placeholder="e.g. Add more outdoor stops, no museums",
+                        key="dt_feedback_input", label_visibility="collapsed"
+                    )
+                    st.caption(
+                        "💡 Try: &nbsp;"
+                        "**Add Lombard Street** · "
+                        "**Skip museums** · "
+                        "**More nature spots** · "
+                        "**Start at 10 AM** · "
+                        "**Fewer stops** · "
+                        "**Include the Ferry Building**"
+                    )
+                    if st.button("🔄 Refine", key="dt_refine") and feedback_text.strip():
+                        _, dt_graph = _load_day_trip_resources()
+                        refine_tid = st.session_state["dt_thread_id"]
+                        config = {"configurable": {"thread_id": refine_tid}}
+                        rh3: dict = {}
+                        dt_progress3: dict = {"current": None, "done": set(), "subtask": ""}
+                        from routeiq.agent.day_trip_agent import register_progress as _dt_register3
+                        _dt_register3(refine_tid, dt_progress3)
+                        st.session_state["dt_result_holder"] = rh3
+                        st.session_state["dt_progress"] = dt_progress3
+                        st.session_state["dt_progress_thread_id"] = refine_tid
+                        st.session_state["dt_phase"] = "planning"
+                        st.session_state.pop("dt_draft", None)
+                        t = threading.Thread(
+                            target=_run_dt_refine_thread,
+                            args=(feedback_text.strip(), config, dt_graph, rh3), daemon=True
+                        )
+                        st.session_state["dt_thread"] = t
+                        t.start()
+                        st.rerun()
+
+            elif dt_phase == "narrating":
+                st.info("✍️ Writing your narrative…")
+                thread = st.session_state.get("dt_thread")
+                if thread and thread.is_alive():
+                    time.sleep(0.5)
+                    st.rerun()
+                else:
+                    rh = st.session_state.get("dt_result_holder", {})
+                    if rh.get("status") == "done":
+                        st.session_state["dt_narrative"] = rh.get("narrative")
+                        if rh.get("draft"):
+                            st.session_state["dt_draft"] = rh["draft"]
+                        if rh.get("route_coords"):
+                            st.session_state["dt_route_coords"] = rh["route_coords"]
+                        st.session_state["dt_phase"] = "done"
+                    else:
+                        st.session_state["dt_phase"] = "draft_ready"
+                        st.error(f"Narration error: {rh.get('error', 'unknown')}")
+                    st.rerun()
+
+    # ── Done — map + cards + narrative ───────────────────────────────────────
+
+    elif dt_phase == "done":
+        with _dt_area.container():
+            draft = st.session_state.get("dt_draft") or {}
+            stops = draft.get("stops") or []
+            route_coords = st.session_state.get("dt_route_coords") or []
+            city_val = st.session_state.get("dt_city_val", "")
+            hours_val = st.session_state.get("dt_hours_val", "")
+
+            if stops:
+                st.markdown(f"**{city_val} · {hours_val}h · {len(stops)} stops**")
+                map_col, cards_col = st.columns([3, 2])
+
+                with map_col:
+                    m_done = _render_dt_map(stops, route_coords, height=480)
+                    st_folium(m_done, height=480, use_container_width=True, returned_objects=[])
+
+                with cards_col:
+                    cards_html = (
+                        '<div style="max-height:480px;overflow-y:auto;padding-right:6px;">'
+                        + "".join(render_dt_card(s, i) for i, s in enumerate(stops, 1))
+                        + "</div>"
+                        + IMAGE_MODAL_HTML
+                    )
+                    st.components.v1.html(cards_html, height=490, scrolling=False)
+
+            narrative = st.session_state.get("dt_narrative") or ""
+            if narrative:
+                with st.expander("Trip narrative", expanded=True):
+                    st.markdown(narrative)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 2 — Route Planner (existing code, unchanged)
