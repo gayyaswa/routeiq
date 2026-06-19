@@ -575,6 +575,7 @@ with tab1:
             daemon=True,
         )
         st.session_state["dt_thread"] = thread
+        st.session_state["dt_plan_start"] = time.perf_counter()
         thread.start()
         st.rerun()
 
@@ -616,6 +617,17 @@ with tab1:
                 if draft:
                     st.session_state["dt_draft"] = draft
                     st.session_state["dt_route_coords"] = snapshot.values.get("route_coords") or []
+                    # Planning time
+                    plan_start = st.session_state.pop("dt_plan_start", None)
+                    st.session_state["dt_plan_elapsed"] = (
+                        round(time.perf_counter() - plan_start) if plan_start else None
+                    )
+                    # Tool call count from agent messages
+                    from langchain_core.messages import ToolMessage as _ToolMessage
+                    msgs = snapshot.values.get("messages") or []
+                    st.session_state["dt_tool_call_count"] = sum(
+                        1 for m in msgs if isinstance(m, _ToolMessage)
+                    )
                     st.session_state["dt_phase"] = "draft_ready"
                 else:
                     st.session_state["dt_phase"] = "idle"
@@ -640,6 +652,13 @@ with tab1:
                 st.markdown(
                     f"**Draft itinerary — {city_val} · {hours_val}h · {len(stops)} stops**"
                 )
+                _elapsed = st.session_state.get("dt_plan_elapsed")
+                _tool_calls = st.session_state.get("dt_tool_call_count")
+                if _elapsed is not None or _tool_calls is not None:
+                    _mc1, _mc2, _mc3 = st.columns(3)
+                    _mc1.metric("⏱ Planned in", f"{_elapsed}s" if _elapsed is not None else "—")
+                    _mc2.metric("🔧 Tool calls", str(_tool_calls) if _tool_calls is not None else "—")
+                    _mc3.metric("📍 Stops", str(len(stops)))
                 route_coords_draft = st.session_state.get("dt_route_coords") or []
                 m_draft = _render_dt_map(stops, route_coords_draft, height=300)
                 st_folium(m_draft, height=300, use_container_width=True, returned_objects=[])
