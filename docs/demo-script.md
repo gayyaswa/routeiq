@@ -30,21 +30,21 @@ Second, the LangGraph graph starts with a clean `DayTripState`. That state has e
 
 [ACTION: Watch the progress stepper: "Finding POIs → Rating POIs → Enriching details → Structuring itinerary".]
 
-The agent enters the **plan node**. The LLM has five tools bound to it. It doesn't follow a fixed script — it decides which tools to call, in what order, based on what comes back.
+The agent enters the **plan node**. The LLM has five tools bound to it and a suggested order in the prompt — but what drives the actual sequence is data availability, not a fixed script. After every tool call, the LLM looks at what's now in the conversation and asks: what am I still missing to build a complete itinerary?
 
-In practice the pattern is always this:
+Here's how that plays out:
 
-**Tool 1 — `find_city_pois`**: queries the in-memory knowledge graph for San Francisco, filtered to tourism and historic categories. Returns a JSON array of up to 100 POIs — each with its name, lat/lon from OSM, category, and subtype. The coordinates come from OpenStreetMap, not from the LLM's imagination. That matters — I'll come back to it.
+**Iteration 1 — `find_city_pois`**: The LLM has nothing yet. It calls this first because without a POI list there's nothing to rate, enrich, or schedule. Returns up to 100 POIs from the in-memory knowledge graph — each with name, lat/lon from OSM, category, and subtype. The LLM didn't generate those coordinates; they came from OpenStreetMap. That matters — I'll come back to it.
 
-**Tool 2 — `rate_pois`**: takes that list and enriches each POI with ratings, review count, and visitor quotes. Right now the active provider is an LLM-synthetic ratings layer — we fully built TripAdvisor and Foursquare adapters, but both ran into API access issues during development. The synthetic provider generates realistic ratings and review snippets for each POI, disk-cached for 21 days. The tool applies a composite quality score — 40% rating, 30% review volume, 30% Wikipedia significance — and returns the top 30.
+**Iteration 2 — `rate_pois`**: Now the LLM has POIs but no quality signal — all 100 rank equally. It calls `rate_pois` with that list. The active provider right now is an LLM-synthetic ratings layer — we built TripAdvisor and Foursquare adapters fully, but both hit API access issues. The synthetic provider generates realistic ratings and review snippets, disk-cached 21 days. The tool applies a composite score — 40% rating, 30% review volume, 30% Wikipedia significance — and returns the top 30. Now the LLM has quality scores but no factual context per POI.
 
-**Tool 3 — `enrich_poi_details`**: called once per top POI. Hits the Wikipedia MediaWiki API and returns a factual description excerpt and a thumbnail image URL.
+**Iterations 3–10 — `enrich_poi_details`**: Called once per top POI. Each call hits the Wikipedia MediaWiki API and returns a description excerpt and thumbnail URL. The LLM calls this in a loop — one POI per iteration — because each call fills in a `why_visit` fact it couldn't otherwise ground. Once all 8 target POIs have descriptions, it stops calling this tool.
 
-**Tool 4 — `estimate_visit_duration`**: looks up the OSM subtype in a table. Museum → 90 minutes. Viewpoint → 30 minutes. That time gets placed into the itinerary.
+**Final iteration — `estimate_visit_duration`**: The LLM now has POIs, ratings, and Wikipedia facts. The last missing piece is how long to spend at each stop. It calls this tool per OSM subtype — museum → 90 min, viewpoint → 30 min — to fill in `visit_duration_min`.
 
-The LLM loops through this — up to 12 iterations — until it has no more tool calls to make.
+At that point the LLM's response contains no tool calls at all. That's the real exit condition — the loop breaks because there's nothing left to look up. The 12-iteration cap is purely a safety guard in case a confused model keeps requesting tools indefinitely; in a normal run you exit naturally around iteration 8–11.
 
-Then a **second LLM call** with `with_structured_output` extracts a validated Pydantic model. These two phases must be separate: you can't bind free-form tools and enforce a strict JSON schema in the same call.
+Then a **second LLM call** with `with_structured_output` extracts a validated Pydantic model from all those tool results. These two phases must be separate: you can't bind free-form tools and enforce a strict JSON schema in the same call.
 
 ---
 
