@@ -328,6 +328,15 @@ def _plan(state: DayTripState, config: Optional[RunnableConfig] = None) -> dict:
         )
     else:
         messages = list(state["messages"])
+        # Strengthen the last refinement message so the LLM re-calls tools instead of
+        # treating existing tool results as sufficient.
+        last = messages[-1]
+        if isinstance(last, HumanMessage) and last.content.startswith("Refine itinerary:"):
+            messages[-1] = HumanMessage(content=(
+                f"{last.content}\n\n"
+                f"Call find_city_pois and rate_pois again to discover POIs that match the "
+                f"updated preferences above, then rebuild the itinerary from the new results."
+            ))
 
     # Phase 1 — ReAct loop: execute tools until the LLM stops calling them
     max_iterations = 12
@@ -362,12 +371,26 @@ def _plan(state: DayTripState, config: Optional[RunnableConfig] = None) -> dict:
         msg.content for msg in messages if isinstance(msg, ToolMessage)
     ) or "No tool results available."
 
+    # Carry refinement feedback into the extraction prompt so the LLM applies it.
+    refinement_feedback = next(
+        (m.content.split("Refine itinerary:", 1)[-1].split("\n\n")[0].strip()
+         for m in reversed(messages)
+         if isinstance(m, HumanMessage) and "Refine itinerary:" in m.content),
+        None,
+    )
+    refinement_note = (
+        f"\nUser refinement request: \"{refinement_feedback}\"\n"
+        f"IMPORTANT: Apply this refinement — include stops matching the updated preferences "
+        f"and exclude any stop types the user wants removed.\n"
+    ) if refinement_feedback else ""
+
     extraction_messages = [
         HumanMessage(content=(
             f"Extract a structured day trip itinerary from these tool results.\n\n"
             f"Trip: {state['time_budget_hours']}-hour day in {state['city']} "
             f"starting at {state['start_time']}. "
-            f"Preferences: {', '.join(state['preferences']) or 'any'}.\n\n"
+            f"Preferences: {', '.join(state['preferences']) or 'any'}."
+            f"{refinement_note}\n\n"
             f"=== TOOL RESULTS ===\n{tool_context}\n=== END TOOL RESULTS ===\n\n"
             f"Rules:\n"
             f"- Include 8-10 stops matching the preferences.\n"
