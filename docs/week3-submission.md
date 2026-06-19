@@ -68,6 +68,10 @@ Full `DayTripState` (messages + draft itinerary + approval status) checkpointed 
 ### How I know it worked
 User goes from empty form → approved stop cards with ratings, visitor reviews, and Wikipedia descriptions (+ thumbnail images) → map-rendered narrative in under 60 seconds for pre-seeded Bay Area cities.
 
+The UI shows three live metrics after planning completes: **planning time**, **tool call count** (derived from `ToolMessage` instances in the LangGraph snapshot), and **stop count**. A typical SF run: 42 s · 22 tool calls · 8 stops.
+
+LangSmith tracing is active (`LANGCHAIN_TRACING_V2=true`, project `routeiq-week3`). Every agent run produces a full trace in the LangSmith dashboard — tool call sequence, token usage per node, and latency breakdown — confirming the agent's reasoning path matches the expected ReAct pattern.
+
 ---
 
 ## Part 2: Architecture
@@ -335,6 +339,9 @@ TripAdvisor (403), Foursquare (404 on v3). Two of three planned providers failed
 ### 7. Graceful pre-flight beats graceful degradation inside the agent
 Checking `kg.known_cities()` and running the Overpass fetch before the agent starts (with a Streamlit spinner) is far better UX than having the agent fail mid-tool-call because the KG is empty. Pre-flight is the pattern: validate dependencies before handing control to the agent, not during.
 
+### 8. Observability is how you verify an agent actually did what you think
+The ReAct loop runs inside a background thread. Without tracing, there's no way to know which tool was called when, what it returned, or which LLM call consumed most of the latency. LangSmith (`LANGCHAIN_TRACING_V2=true`) solved this: every planning run produces a trace with the full tool call sequence, token counts per node, and per-step latency. This revealed that `enrich_poi_details` accounts for ~60% of planning time (one Wikipedia API call per POI candidate, executed serially) and that the LLM consistently calls it for 10–12 candidates before settling on 8 stops. That's not visible from the UI alone — you only see the end result, not the reasoning path.
+
 ---
 
 ## Part 8: Tech Stack
@@ -353,4 +360,5 @@ Checking `kg.known_cities()` and running the Overpass fetch before the agent sta
 | Name matching | ChromaDB (ephemeral) | OSM↔provider name entity resolution |
 | Map rendering | Folium + AntPath | Animated route + numbered markers |
 | UI | Streamlit | Two-tab app; background threads for agent streaming |
+| Observability | LangSmith (`routeiq-week3` project) | Full agent traces: tool call sequence, token usage per node, per-step latency |
 | Testing | pytest | 213 tests across 22 files |
