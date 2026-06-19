@@ -5,7 +5,7 @@
 RouteIQ Week 3 adds a true agentic system on top of the Week 2 GraphRAG route planner: a **Day Trip Planner** powered by a LangGraph ReAct agent with human-in-the-loop review, a multi-source ratings layer, and dynamic knowledge graph expansion.
 
 **The one-liner:**
-My agent helps a traveler plan a full-day city itinerary in a Streamlit web app, replacing the 45-minute manual workflow of cross-referencing TripAdvisor, Google Maps, and Wikipedia. It finds OSM POIs, enriches them with real ratings and reviews, fetches Wikipedia facts, and schedules stops in road-time order autonomously using 5 tools — then pauses for human review before generating the narrative — and I'll know it works when a user can go from "Plan a day in San Francisco" to an approved, map-rendered itinerary with stop cards in under 60 seconds.
+My agent helps a traveler plan a full-day city itinerary in a Streamlit web app, replacing the 45-minute manual workflow of cross-referencing TripAdvisor, Google Maps, and Wikipedia. It finds OSM POIs, enriches them with ratings and visitor reviews, fetches Wikipedia facts, and schedules stops in road-time order autonomously using 5 tools — then pauses for human review before generating the narrative — and I'll know it works when a user can go from "Plan a day in San Francisco" to an approved, map-rendered itinerary with stop cards in under 60 seconds.
 
 ---
 
@@ -40,7 +40,7 @@ Streamlit web app (Tab 1 — Day Trip Planner).
 | Tool | Type | Data source |
 |---|---|---|
 | `find_city_pois(city, categories)` | READ | OSM via `RouteKnowledgeGraph` (in-memory) |
-| `rate_pois(city, poi_list_json)` | READ | TripAdvisor or Foursquare (via `RatingsFactory`) |
+| `rate_pois(city, poi_list_json)` | READ | `RatingsFactory` dispatcher — TripAdvisor and Foursquare adapters implemented; **current active provider: LLM Synthetic** (see Part 3) |
 | `enrich_poi_details(poi_name, city)` | READ | Wikipedia MediaWiki API |
 | `estimate_visit_duration(category, subtype)` | READ | Internal lookup table |
 | `search_poi_by_name(name, city)` | READ | Nominatim geocoder (on refine only) |
@@ -66,7 +66,7 @@ Full `DayTripState` (messages + draft itinerary + approval status) checkpointed 
 - `NullRatingProvider` fallback: agent works without any ratings API key; POIs ranked by KG notability only.
 
 ### How I know it worked
-User goes from empty form → approved stop cards with ratings, photos, and Wikipedia descriptions → map-rendered narrative in under 60 seconds for pre-seeded Bay Area cities.
+User goes from empty form → approved stop cards with ratings, visitor reviews, and Wikipedia descriptions (+ thumbnail images) → map-rendered narrative in under 60 seconds for pre-seeded Bay Area cities.
 
 ---
 
@@ -125,10 +125,12 @@ Critical invariant: `find_city_pois` must call `get_kg()` (singleton), never `Ro
 |--------|------|--------|
 | OpenStreetMap via Overpass | POI metadata (name, lat/lon, OSM category/subtype, wikipedia tag) | Pre-seeded: 984 Bay Area POIs in `bay_area_all.json.gz`; any city on demand |
 | Wikipedia MediaWiki API | Landmark intro text (≤500 chars) + thumbnail image URL | Fetched per POI by `enrich_poi_details` tool |
-| TripAdvisor Content API | Ratings, up to 3 reviews (≥80 chars, sorted by HELPFUL), up to 5 photos | Cached 21 days per city; 0 live calls for pre-seeded Bay Area cities |
-| Foursquare Places API | Ratings (0–10 → normalized 0–5), tips, hours | Alternative provider; same cache strategy |
-| LLM Synthetic (fallback) | Claude-generated ratings + visitor quotes, disk-cached | Active fallback when TripAdvisor key is pending |
+| LLM Synthetic (Claude) — **current active** | Claude-generated ratings, review snippets, and visitor quotes per POI | Disk-cached 21 days per city; active because live provider access is unavailable (see below) |
+| TripAdvisor Content API — *implemented, inactive* | Ratings, up to 3 reviews (≥80 chars, sorted by HELPFUL), up to 5 photos | Adapter fully built in `routeiq/ratings/`; inactive — API key returned HTTP 403 (IAM deny) |
+| Foursquare Places API — *implemented, inactive* | Ratings (0–10 → normalized 0–5), tips, hours | Adapter fully built; inactive — v3 endpoint retired (404), v2 lacks ratings on free tier |
 | RouteKnowledgeGraph | 112+ nodes: POI, City, Region, Category; 4 typed edge types | Pre-seeded Bay Area; expanded on demand for new cities |
+
+> **Current runtime configuration:** `RATING_PROVIDER=llm_synthetic`. TripAdvisor and Foursquare adapters are fully implemented and tested in `routeiq/ratings/`; switching either live is a one-env-var change once API access is granted.
 
 ### Ratings — composite score formula
 
@@ -145,7 +147,7 @@ POIs with `rating < 3.8` AND `review_count < 20` are dropped before scoring. Top
 | Layer | Source | Provides | Why not replace with others? |
 |---|---|---|---|
 | Geographic | OSM (via KG) | All city POIs — complete, exact lat/lon, categories | TripAdvisor returns only ~50 "attractions" and misses parks, viewpoints, smaller historic sites |
-| Social quality | TripAdvisor / Foursquare | Ratings, visitor reviews, photos | OSM has no quality signal — without ratings all 80–150 POIs rank equally |
+| Social quality | TripAdvisor / Foursquare *(adapters implemented; LLM Synthetic currently active due to API access)* | Ratings, visitor reviews, and quotes | OSM has no quality signal — without ratings all 80–150 POIs rank equally |
 | Factual knowledge | Wikipedia | Citable facts for `why_visit`, thumbnail image | Reviews are opinions; Wikipedia provides grounded facts |
 
 ---
@@ -282,6 +284,7 @@ Instructions:
 **Problem:** String matching between OSM names ("de Young Museum") and TripAdvisor names ("de Young Fine Arts Museums of San Francisco") failed for ~40% of POI pairs.
 **Fix:** ChromaDB embedding similarity for the initial merge pass; haversine proximity ≤100 m as a fallback for cases where names are completely different.
 **Learning:** Name matching across geospatial data sources is an entity resolution problem, not a string comparison problem. Semantic embeddings handle abbreviations and partial names naturally. Reusing ChromaDB (already a project dependency) kept the solution simple.
+**Note:** This matching logic is exercised when TripAdvisor or Foursquare is the active provider. With `LLMSyntheticRatingProvider` (current active), POI names are passed directly to the LLM — no cross-source name resolution is needed.
 
 ### 6. TripAdvisor key 403 IAM deny
 **Problem:** TripAdvisor Content API returned HTTP 403 for the live API key. The ratings layer had no fallback.
@@ -343,9 +346,9 @@ Checking `kg.known_cities()` and running the Overpass fetch before the agent sta
 | LLM alternative | Nebius Token Factory (OpenAI-compatible) | Dev/testing; `LLM_PROVIDER=nebius` env var swap |
 | Road network | OSMnx + NetworkX | A* pathfinding for stop scheduling |
 | POI data | OpenStreetMap via Overpass | Geographic completeness for any city |
-| Ratings (primary) | TripAdvisor Content API | Ratings, reviews, photos |
-| Ratings (secondary) | Foursquare v2 | Alternative provider |
-| Ratings (active fallback) | LLM Synthetic (Claude) | Demo-reliable fallback, disk-cached |
+| Ratings — **current active** | LLM Synthetic (Claude) | Generates ratings, review snippets, and visitor quotes per POI; disk-cached 21 days |
+| Ratings — TripAdvisor *(implemented)* | TripAdvisor Content API | Adapter complete; inactive — API key returned HTTP 403 |
+| Ratings — Foursquare *(implemented)* | Foursquare v2 | Adapter complete; inactive — v3 retired, v2 lacks ratings on free tier |
 | Knowledge graph | NetworkX DiGraph + `get_kg()` singleton | POI/City/Region typed edges; dynamic expansion |
 | Name matching | ChromaDB (ephemeral) | OSM↔provider name entity resolution |
 | Map rendering | Folium + AntPath | Animated route + numbered markers |

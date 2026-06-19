@@ -482,12 +482,12 @@ tab1, tab2 = st.tabs(["🏙 Day Trip Planner", "🗺 Route Planner"])
 # Cities pre-loaded in the Bay Area KG master — instant POI lookup, no Overpass call
 _DEMO_CITIES_FAST = [
     "San Francisco, CA", "Oakland, CA", "Berkeley, CA",
-    "San Jose, CA", "Santa Cruz, CA",
+    "San Jose, CA",
 ]
 # Cities that need a live Overpass fetch on first use (~15–30 s), then cached
 _DEMO_CITIES_SLOW = [
-    "Los Angeles, CA", "New York, NY", "Chicago, IL",
-    "Seattle, WA", "Austin, TX",
+    "Santa Cruz, CA", "Los Angeles, CA", "New York, NY",
+    "Chicago, IL", "Seattle, WA", "Austin, TX",
 ]
 
 with tab1:
