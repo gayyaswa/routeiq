@@ -92,6 +92,35 @@ class POIFinder:
         # --- Path 3: Live Overpass query (fallback for uncached routes) ---
         return self._query_overpass(buffer_poly, gz_path, progress_fn, t0)
 
+    def find_pois_in_bbox(
+        self,
+        south: float,
+        north: float,
+        west: float,
+        east: float,
+    ) -> list[POI]:
+        """Find POIs within a lat/lon bounding box — used by the Day Trip agent."""
+        from shapely.geometry import box
+        bbox_poly = box(west, south, east, north)
+
+        if os.path.exists(self._master_path):
+            result = self._filter_master(bbox_poly, time.perf_counter())
+            if result is not None:
+                return result
+
+        stem = f"pois_n{north:.3f}_s{south:.3f}_e{east:.3f}_w{west:.3f}"
+        gz_path = os.path.join(self._cache_dir, f"{stem}.json.gz")
+        json_path = os.path.join(self._cache_dir, f"{stem}.json")
+
+        if os.path.exists(gz_path):
+            with gzip.open(gz_path, "rb") as f:
+                return [POI(**d) for d in json.loads(f.read())]
+        if os.path.exists(json_path):
+            with open(json_path) as f:
+                return [POI(**d) for d in json.load(f)]
+
+        return self._query_overpass(bbox_poly, gz_path, None, time.perf_counter())
+
     # ------------------------------------------------------------------
 
     def _filter_master(self, buffer_poly, t0: float) -> list[POI] | None:

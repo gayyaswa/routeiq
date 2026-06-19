@@ -5,6 +5,6 @@ CATEGORY_COLORS: dict[str, str] = {
 }
 
 from routeiq.ui.map_builder import MapBuilder
-from routeiq.ui.card_renderer import render_stop_card, render_vector_card
+from routeiq.ui.card_renderer import render_stop_card, render_vector_card, render_dt_card
 
-__all__ = ["MapBuilder", "CATEGORY_COLORS", "render_stop_card", "render_vector_card"]
+__all__ = ["MapBuilder", "CATEGORY_COLORS", "render_stop_card", "render_vector_card", "render_dt_card"]

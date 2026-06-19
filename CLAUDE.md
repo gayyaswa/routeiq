@@ -16,10 +16,10 @@ Tests: `python3 -m pytest tests/ -v`
 ```
 NL Query
     → LangGraph Pipeline
-        [parse]   Query Parser (Claude)          extract origin, destination, preferences
+        [parse]   Query Parser (LLM)             extract origin, destination, preferences
         [graph]   Graph Layer (OSMnx + NetworkX) shortest path + POI spatial join + detour scoring
         [rag]     RAG Layer (ChromaDB)           landmark descriptions fetched and indexed
-        [narrate] Response (Claude)              narrative + structured stop list
+        [narrate] Response (LLM)                 narrative + structured stop list
         [edge]    Conditional edges              handle no POIs / long route / unparseable query
     → UI                                         map with route + markers + stop cards
 ```
@@ -142,10 +142,11 @@ routeiq/insights/
 - Format: Prompt text → What it produced → Key observation
 
 ### Adding AI features
-- Use LangChain (`langchain-anthropic`, `langchain-core`) and LangGraph (`langgraph`) — not the raw Anthropic SDK
-- Default model: `claude-sonnet-4-6` via `ChatAnthropic`
+- Use LangChain (`langchain-openai`, `langchain-core`) and LangGraph (`langgraph`) — not raw SDKs
+- Active model: `openai/gpt-oss-120b-fast` via Nebius (`ChatOpenAI` with `base_url`)
+- Provider is controlled by `LLM_PROVIDER` env var — use `create_llm()` from `routeiq/llm_factory.py`
 - Inject the LLM as a dependency — create it at the entry point, pass it down
-- API key via environment variable (`ANTHROPIC_API_KEY`) with secrets fallback
+- API key via environment variable (`NEBIUS_API_KEY`) with secrets fallback
 - AI features must degrade gracefully when no key is present
 
 ### Code conventions
@@ -191,7 +192,7 @@ Do not comment what the code does.
 | Graph traversal | NetworkX | In-memory A*, no server needed |
 | Pipeline orchestration | LangGraph | State machine with named nodes + conditional edges |
 | Vector store | ChromaDB | Local, no server, LangChain native |
-| LLM | Claude Sonnet 4.6 via LangChain | |
+| LLM | Nebius `gpt-oss-120b-fast` via LangChain (OpenAI-compatible) | Swap to Anthropic via `LLM_PROVIDER=anthropic` |
 | Map rendering | Folium | Swap for any map library |
 | UI | TBD | Not locked in — Streamlit, FastAPI+React, or CLI |
 

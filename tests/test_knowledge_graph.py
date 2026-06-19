@@ -65,3 +65,76 @@ def test_get_pois_for_route_sf_sausalito(kg):
 
 def test_get_pois_for_route_empty_coords_returns_empty(kg):
     assert kg.get_pois_for_route([]) == []
+
+
+# ── new methods: known_cities / get_pois_for_city / add_city_pois ──────────
+
+def test_known_cities_contains_sf(kg):
+    assert "San Francisco" in kg.known_cities()
+
+
+def test_known_cities_returns_set(kg):
+    cities = kg.known_cities()
+    assert isinstance(cities, set)
+    assert len(cities) >= 10   # at least the 10 Bay Area cities
+
+
+def test_get_pois_for_city_sf_returns_pois(kg):
+    pois = kg.get_pois_for_city("San Francisco")
+    names = [p.name for p in pois]
+    assert "Coit Tower" in names
+    # Golden Gate Bridge LOCATED_IN = Sausalito (heuristic), but its coordinates
+    # are inside SF's OSM polygon — polygon gate overrides LOCATED_IN.
+    assert "Golden Gate Bridge" in names
+
+
+def test_get_pois_for_city_strips_state_suffix(kg):
+    # "San Francisco, CA" should match "San Francisco"
+    pois_full = kg.get_pois_for_city("San Francisco, CA")
+    pois_short = kg.get_pois_for_city("San Francisco")
+    assert len(pois_full) == len(pois_short)
+
+
+def test_get_pois_for_city_unknown_city_returns_empty(kg):
+    assert kg.get_pois_for_city("Atlantis, ZZ") == []
+
+
+def test_add_city_pois_adds_city_node():
+    from routeiq.graph.poi import POI
+    kg2 = RouteKnowledgeGraph()
+    assert "Los Angeles" not in kg2.known_cities()
+
+    new_pois = [
+        POI(name="Getty Center", category="tourism", lat=34.0780, lon=-118.4741, osm_id="way/la_001"),
+        POI(name="Griffith Park", category="natural", lat=34.1366, lon=-118.2940, osm_id="way/la_002"),
+    ]
+    kg2.add_city_pois("Los Angeles", 34.05, -118.24, new_pois)
+
+    assert "Los Angeles" in kg2.known_cities()
+    pois = kg2.get_pois_for_city("Los Angeles")
+    assert len(pois) == 2
+    assert {p.name for p in pois} == {"Getty Center", "Griffith Park"}
+
+
+def test_add_city_pois_creates_near_poi_edges():
+    from routeiq.graph.poi import POI
+    kg2 = RouteKnowledgeGraph()
+    # Two POIs ~7 km apart — within NEAR_POI_MAX_KM (25 km)
+    new_pois = [
+        POI(name="Getty Center", category="tourism", lat=34.0780, lon=-118.4741, osm_id="way/la_001"),
+        POI(name="Griffith Park", category="natural", lat=34.1366, lon=-118.2940, osm_id="way/la_002"),
+    ]
+    kg2.add_city_pois("Los Angeles", 34.05, -118.24, new_pois)
+
+    g = kg2.graph
+    assert g.has_edge("way/la_001", "way/la_002")
+    assert g.edges["way/la_001", "way/la_002"]["rel"] == "NEAR_POI"
+
+
+def test_add_city_pois_idempotent():
+    from routeiq.graph.poi import POI
+    kg2 = RouteKnowledgeGraph()
+    poi = POI(name="Getty Center", category="tourism", lat=34.0780, lon=-118.4741, osm_id="way/la_001")
+    kg2.add_city_pois("Los Angeles", 34.05, -118.24, [poi])
+    kg2.add_city_pois("Los Angeles", 34.05, -118.24, [poi])   # second call — no duplicates
+    assert len(kg2.get_pois_for_city("Los Angeles")) == 1

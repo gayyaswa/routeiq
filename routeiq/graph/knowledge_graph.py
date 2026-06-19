@@ -1,9 +1,23 @@
 """NetworkX knowledge graph: POI/City/Region/Category nodes with typed edges (Registry pattern)."""
 from __future__ import annotations
+import dataclasses
 import math
 from typing import Any
 import networkx as nx
 from routeiq.graph.knowledge_graph_data import POIS, CITIES, REGIONS, CATEGORIES, RELATIONSHIPS
+from routeiq.graph.poi import POI
+
+_POI_FIELDS = {f.name for f in dataclasses.fields(POI)}
+
+_shared_instance: "RouteKnowledgeGraph | None" = None
+
+
+def get_kg() -> "RouteKnowledgeGraph":
+    """Return the process-wide KG singleton so all callers share the same in-memory graph."""
+    global _shared_instance
+    if _shared_instance is None:
+        _shared_instance = RouteKnowledgeGraph()
+    return _shared_instance
 
 
 class RouteKnowledgeGraph:
@@ -63,6 +77,74 @@ class RouteKnowledgeGraph:
         """Returns all POI osm_ids in the graph."""
         return [n for n, d in self._g.nodes(data=True) if d.get("type") == "POI"]
 
+    def known_cities(self) -> set[str]:
+        """Returns the set of city names currently in the graph."""
+        return {d["name"] for n, d in self._g.nodes(data=True) if d.get("type") == "City"}
+
+    def get_pois_for_city(self, city_name: str) -> list[POI]:
+        """Return POIs spatially contained within city_name's OSM administrative boundary.
+
+        Uses geocode_to_gdf to fetch the real city polygon from OSM (cached per instance),
+        so correctness does not depend on the _nearest_city heuristic used when building
+        LOCATED_IN edges.  The LOCATED_IN pre-filter still runs as a fast coarse pass to
+        avoid polygon-checking every POI in the graph.
+        """
+        from shapely.geometry import Point
+        short = city_name.split(",")[0].strip()
+        city_poly = self._city_polygon(city_name)
+
+        result = []
+        for node_id, data in self._g.nodes(data=True):
+            if data.get("type") != "POI":
+                continue
+            poi = POI(**{k: v for k, v in data.items() if k in _POI_FIELDS})
+            if city_poly is not None:
+                # Polygon is authoritative — supersedes LOCATED_IN heuristic so
+                # border attractions (e.g. Golden Gate Bridge → Sausalito) are included.
+                if not city_poly.contains(Point(poi.lon, poi.lat)):
+                    continue
+            else:
+                # No polygon available — fall back to LOCATED_IN heuristic.
+                poi_city = self._city_for_poi(node_id)
+                if poi_city is not None and poi_city != short:
+                    continue
+            result.append(poi)
+        return result
+
+    def _city_polygon(self, city_name: str):
+        """Fetch and cache the OSM administrative boundary polygon for city_name."""
+        if not hasattr(self, "_poly_cache"):
+            self._poly_cache: dict = {}
+        if city_name not in self._poly_cache:
+            try:
+                import osmnx as ox
+                gdf = ox.geocoder.geocode_to_gdf(city_name)
+                self._poly_cache[city_name] = gdf.geometry.iloc[0]
+                print(f"[kg] polygon fetched for '{city_name}'", flush=True)
+            except Exception as exc:
+                print(f"[kg] polygon fetch failed for '{city_name}': {exc} — falling back to LOCATED_IN only", flush=True)
+                self._poly_cache[city_name] = None
+        return self._poly_cache[city_name]
+
+    def add_city_pois(
+        self,
+        city_name: str,
+        city_lat: float,
+        city_lon: float,
+        pois: list[POI],
+    ) -> None:
+        """Add a new city node + its POIs to the in-memory graph.
+
+        Safe to call multiple times for the same city — existing nodes are not duplicated.
+        """
+        if city_name not in self._g:
+            self._g.add_node(city_name, type="City", name=city_name, lat=city_lat, lon=city_lon)
+        for poi in pois:
+            if poi.osm_id not in self._g:
+                self._g.add_node(poi.osm_id, type="POI", **dataclasses.asdict(poi))
+                self._g.add_edge(poi.osm_id, city_name, rel="LOCATED_IN")
+        self._add_near_poi_edges_for(pois)
+
     def node_count(self) -> int:
         return self._g.number_of_nodes()
 
@@ -89,6 +171,15 @@ class RouteKnowledgeGraph:
                 if dist <= self._NEAR_POI_MAX_KM:
                     self._g.add_edge(id_a, id_b, rel="NEAR_POI", dist_km=round(dist, 1))
                     self._g.add_edge(id_b, id_a, rel="NEAR_POI", dist_km=round(dist, 1))
+
+    def _add_near_poi_edges_for(self, pois: list[POI]) -> None:
+        """Compute NEAR_POI edges only among the supplied POIs (used for dynamic city additions)."""
+        for i, poi_a in enumerate(pois):
+            for poi_b in pois[i + 1:]:
+                dist = self._haversine(poi_a.lat, poi_a.lon, poi_b.lat, poi_b.lon)
+                if dist <= self._NEAR_POI_MAX_KM:
+                    self._g.add_edge(poi_a.osm_id, poi_b.osm_id, rel="NEAR_POI", dist_km=round(dist, 1))
+                    self._g.add_edge(poi_b.osm_id, poi_a.osm_id, rel="NEAR_POI", dist_km=round(dist, 1))
 
     def _city_for_poi(self, osm_id: str) -> str | None:
         return self._first_neighbor(osm_id, "LOCATED_IN")
