@@ -86,19 +86,16 @@ def _record() -> None:
         page = browser.new_page(viewport={"width": 1280, "height": 800})
         page.goto(URL, wait_until="networkidle")
 
-        # ── Frame 1: initial load ─────────────────────────────────────────
-        print("  Waiting for page to settle…")
+        # ── Frame 1: initial load — Tab 1 (Day Trip Planner) ────────────
+        print("  Waiting for app title to render…")
+        try:
+            page.wait_for_selector("h1:has-text('RouteIQ')", timeout=30_000)
+        except Exception:
+            print("  WARNING: title not found, waiting anyway")
         page.wait_for_timeout(3000)
         snap(page, 3000)
 
-        # ── Wait for hint buttons and bg-init banner to clear ────────────
-        print("  Waiting for hint buttons (bg init may take ~30 s)…")
-        try:
-            page.wait_for_selector(f"button:has-text('{DEMO_BUTTON_TEXT}')", timeout=90_000)
-        except Exception:
-            print("  WARNING: hint buttons not found in time, continuing anyway")
-
-        # Wait for the "Loading RouteIQ components" banner to disappear
+        # ── Wait for bg-init banner to clear ─────────────────────────────
         print("  Waiting for background init to finish…")
         try:
             page.wait_for_selector(
@@ -107,12 +104,30 @@ def _record() -> None:
             print("  ✅ Background init complete")
         except Exception:
             print("  NOTE: bg-init banner gone or timed out, continuing")
-        # Extra wait for pre-warm thread (_load_heavy) to finish LLM + ChromaDB init
         print("  Waiting for pre-warm (LLM + ChromaDB)…")
         page.wait_for_timeout(15_000)
         print("  ✅ Pre-warm wait complete")
 
-        # ── Frame 2: hint buttons ready ───────────────────────────────────
+        # ── Frame 2: Day Trip Planner form ready ─────────────────────────
+        snap(page, 3000)
+
+        # ── Switch to Tab 2 (Route Planner) ──────────────────────────────
+        print("  Switching to Route Planner tab…")
+        try:
+            page.locator("button:has-text('Route Planner')").first.click()
+            page.wait_for_timeout(1500)
+            print("  ✅ Route Planner tab active")
+        except Exception as exc:
+            print(f"  WARNING: tab switch failed ({exc})")
+
+        # ── Wait for hint buttons ─────────────────────────────────────────
+        print("  Waiting for hint buttons…")
+        try:
+            page.wait_for_selector(f"button:has-text('{DEMO_BUTTON_TEXT}')", timeout=30_000)
+        except Exception:
+            print("  WARNING: hint buttons not found in time, continuing anyway")
+
+        # ── Frame 3: Route Planner with hint buttons ──────────────────────
         snap(page, 3000)
 
         # ── Click the demo route ──────────────────────────────────────────

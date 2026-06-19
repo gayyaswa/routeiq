@@ -3,7 +3,7 @@
 > Tell RouteIQ where you want to go and what you care about — it builds a time-scheduled day trip on a live map, complete with rated stops, Wikipedia context, and a written narrative. Refine with plain language ("skip museums", "add Lombard Street") until it's exactly your trip. Powered by a LangGraph ReAct agent, Graph RAG over OSM road networks, and Nebius `gpt-oss-120b-fast`.
 
 <!-- Run /generate-demo-gif to produce this -->
-<!-- ![App demo](docs/demo.gif) -->
+![App demo](docs/demo.gif)
 
 ---
 
