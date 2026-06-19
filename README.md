@@ -1,6 +1,6 @@
 # RouteIQ
 
-> An agentic day-trip planner and scenic route explorer: describe a city or route in plain language, get a map-rendered, time-scheduled itinerary with real POI ratings, Wikipedia context, and a generated narrative — powered by a LangGraph ReAct agent, Graph RAG over OSM road networks, and a multi-source ratings layer.
+> Tell RouteIQ where you want to go and what you care about — it builds a time-scheduled day trip on a live map, complete with rated stops, Wikipedia context, and a written narrative. Refine with plain language ("skip museums", "add Lombard Street") until it's exactly your trip. Powered by a LangGraph ReAct agent, Graph RAG over OSM road networks, and Nebius `gpt-oss-120b-fast`.
 
 <!-- Run /generate-demo-gif to produce this -->
 <!-- ![App demo](docs/demo.gif) -->
@@ -21,11 +21,11 @@ streamlit run app.py
 
 | Variable | Default | Description |
 |---|---|---|
-| `LLM_PROVIDER` | `anthropic` | `anthropic` or `nebius` |
-| `LLM_MODEL` | `claude-sonnet-4-6` | Model name for the chosen provider |
-| `ANTHROPIC_API_KEY` | — | Required when `LLM_PROVIDER=anthropic` |
+| `LLM_PROVIDER` | `nebius` | `nebius` or `anthropic` |
+| `LLM_MODEL` | `openai/gpt-oss-120b-fast` | Model name for the chosen provider |
 | `NEBIUS_API_KEY` | — | Required when `LLM_PROVIDER=nebius` |
-| `NEBIUS_API_BASE` | — | Required when `LLM_PROVIDER=nebius` |
+| `NEBIUS_API_BASE` | `https://api.tokenfactory.nebius.com/v1/` | Nebius OpenAI-compatible endpoint |
+| `ANTHROPIC_API_KEY` | — | Required when `LLM_PROVIDER=anthropic` |
 | `RATING_PROVIDER` | `llm_synthetic` | `llm_synthetic` · `tripadvisor` · `foursquare` |
 
 > **Bay Area cities load instantly** — road graphs, POI data, and rating caches for San Francisco, Oakland, Berkeley, San Jose, and Santa Cruz are bundled. Other cities trigger a one-time Overpass fetch (~15–30 s), then cache locally.
@@ -34,11 +34,11 @@ streamlit run app.py
 
 ## What It Does
 
-**Tab 1 — Day Trip Planner (Agent):** Enter a city, pick interests, hours, and start time. A LangGraph ReAct agent calls five tools to find, rank, and enrich Points of Interest, then schedules them in road-time-accurate order using A\* pathfinding. A human-in-the-loop interrupt lets you review the draft map + stop cards, refine with natural language ("Add Lombard Street", "Skip museums"), and approve before the narrative is written.
+Enter a city, pick interests, hours, and start time. A LangGraph ReAct agent calls five tools to find, rank, and enrich Points of Interest, then schedules them in road-time-accurate order using A\* pathfinding. A human-in-the-loop interrupt lets you review the draft map + stop cards, refine with natural language ("Add Lombard Street", "Skip museums"), and approve before the narrative is written.
 
-**Tab 2 — Route Planner (GraphRAG):** Ask a scenic route question ("Drive SF → Muir Woods, show redwoods and coastal views"). A LangGraph pipeline parses the query, loads the OSM road network, spatially joins POIs along the corridor, enriches them with Wikipedia, runs a 3-stage Graph RAG retrieval, and generates a streaming narrative with a Folium map and stop cards.
+Supports any city — Bay Area corridors load instantly, other regions do a one-time Overpass fetch (~15–30 s) and cache locally.
 
-Both tabs support any city or route — Bay Area corridors are instant, other regions download on first use.
+> The app also includes a **Route Planner** tab for scenic corridor queries using 3-stage Graph RAG over OSM road networks. See [docs/README-routeplanner.md](docs/README-routeplanner.md) for full details.
 
 ---
 
@@ -64,17 +64,6 @@ flowchart TD
 
     style Agent fill:#f0f4ff,stroke:#6b7280
     style Preflight fill:#fff7ed,stroke:#d97706
-```
-
-### Route Planner — Pipeline Flow
-
-```mermaid
-flowchart LR
-    Q["NL query"] --> PA["parse\nClaude extracts\norigin / dest / prefs"]
-    PA --> G["graph\nOSMnx geocode\nA* path\nPOI spatial join\nDetour scoring"]
-    G --> R["rag\nWikipedia enrichment\nChromaDB 3-stage GraphRAG"]
-    R --> N["narrate\nClaude streaming"]
-    N --> UI["Map · Stop cards\nGraphRAG vs vector comparison"]
 ```
 
 ### Ratings Layer
@@ -123,13 +112,13 @@ graph LR
 
 | Pattern | Where |
 |---|---|
-| **Pipeline** | `RoutePipeline` ([routeiq/pipeline.py](routeiq/pipeline.py)) — LangGraph state machine: parse → graph → rag → narrate with conditional edges. `DayTripAgent` — plan → review → narrate with `interrupt_before`. |
+| **Pipeline** | `DayTripAgent` ([routeiq/agent/day_trip_agent.py](routeiq/agent/day_trip_agent.py)) — LangGraph ReAct agent: plan → review (interrupt) → narrate. |
 | **Strategy** | `POIRatingProvider` ABC ([routeiq/ratings/base.py](routeiq/ratings/base.py)) — `TripAdvisorRatingProvider`, `FoursquareRatingProvider`, `LLMSyntheticRatingProvider` are interchangeable via `RATING_PROVIDER` env var. `DetourScorer` ([routeiq/routing/detour_scorer.py](routeiq/routing/detour_scorer.py)) — swappable scoring algorithm. |
 | **Factory** | `RatingsFactory` ([routeiq/ratings/factory.py](routeiq/ratings/factory.py)) — constructs the active rating provider from env var. |
-| **Facade** | `RouteIQFacade` ([routeiq/facade.py](routeiq/facade.py)) — single entry point for the Route Planner; callers only need `facade.run(query)`. |
+| **Facade** | `RouteIQFacade` ([routeiq/facade.py](routeiq/facade.py)) — single entry point for the Route Planner tab; see [docs/README-routeplanner.md](docs/README-routeplanner.md). |
 | **Registry** | `RouteKnowledgeGraph` ([routeiq/graph/knowledge_graph.py](routeiq/graph/knowledge_graph.py)) — typed node/edge graph of POI, City, Region, Category with LOCATED\_IN / HAS\_CATEGORY / NEAR\_POI edges. `get_kg()` singleton ensures all callers share one in-memory graph. |
 | **Builder** | `MapBuilder` ([routeiq/ui/map_builder.py](routeiq/ui/map_builder.py)) — assembles Folium map with AntPath route, numbered markers, and stop popups. |
-| **Dependency Injection** | LLM (`ChatAnthropic` / `ChatOpenAI`) injected into all AI components — every class is independently testable with mocks. |
+| **Dependency Injection** | LLM (`ChatOpenAI` via Nebius / `ChatAnthropic`) injected into all AI components — every class is independently testable with mocks. |
 
 ---
 
@@ -163,7 +152,7 @@ python3 -m pytest tests/ -v
 ## Project Structure
 
 ```
-app.py                        Streamlit UI — Day Trip Planner + Route Planner tabs
+app.py                        Streamlit UI — Day Trip Planner (agent) + Route Planner tabs
 routeiq/
   agent/
     day_trip_agent.py         LangGraph ReAct agent — plan / review (interrupt) / narrate nodes
@@ -203,8 +192,8 @@ routeiq/
   ui/
     map_builder.py            Folium map with AntPath route + markers (Builder)
     card_renderer.py          Stop card HTML — photos, ratings, visitor quote, hours
-  facade.py                   RouteIQFacade — single DI entry point (Route Planner)
-  pipeline.py                 RoutePipeline — LangGraph state machine (Route Planner)
+  facade.py                   RouteIQFacade — Route Planner entry point (see docs/README-routeplanner.md)
+  pipeline.py                 RoutePipeline — Route Planner LangGraph pipeline (see docs/README-routeplanner.md)
   llm_factory.py              create_llm() — Anthropic / Nebius via env var
 cache/
   graphs/                     OSMnx road network pickles (Bay Area pre-seeded)
@@ -224,14 +213,7 @@ docs/
 
 ## Evaluation
 
-10-query comparison of Graph RAG vs. vector-only retrieval for the Route Planner:
-
-```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-python3 eval/run_eval.py
-```
-
-Results: GraphRAG wins 6/6 route queries, vector wins 4/4 semantic queries — **10/10 prediction accuracy**. Full results in [eval/results.md](eval/results.md).
+GraphRAG vs. vector-only comparison (10 queries, Route Planner) — see [docs/README-routeplanner.md](docs/README-routeplanner.md) for methodology and results.
 
 ---
 
@@ -246,4 +228,4 @@ Results: GraphRAG wins 6/6 route queries, vector wins 4/4 semantic queries — *
 
 ---
 
-Built with [LangGraph](https://langchain-ai.github.io/langgraph/) · [LangChain](https://python.langchain.com) · [OSMnx](https://osmnx.readthedocs.io) · [NetworkX](https://networkx.org) · [ChromaDB](https://docs.trychroma.com) · [Streamlit](https://streamlit.io) · [Folium](https://python-visualization.github.io/folium/) · [Claude Sonnet 4.6](https://anthropic.com) · [Nebius Token Factory](https://tokenfactory.nebius.com)
+Built with [LangGraph](https://langchain-ai.github.io/langgraph/) · [LangChain](https://python.langchain.com) · [OSMnx](https://osmnx.readthedocs.io) · [NetworkX](https://networkx.org) · [ChromaDB](https://docs.trychroma.com) · [Streamlit](https://streamlit.io) · [Folium](https://python-visualization.github.io/folium/) · [Nebius gpt-oss-120b-fast](https://tokenfactory.nebius.com)

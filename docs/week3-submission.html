@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RouteIQ — Week 3 Submission</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    font-size: 11pt;
+    line-height: 1.6;
+    color: #202124;
+    max-width: 900px;
+    margin: 40px auto;
+    padding: 0 24px;
+  }
+  h1 { font-size: 22pt; color: #1a1a2e; border-bottom: 2px solid #4a90d9; padding-bottom: 8px; }
+  h2 { font-size: 15pt; color: #1a1a2e; border-bottom: 1px solid #ddd; padding-bottom: 4px; margin-top: 32px; }
+  h3 { font-size: 12pt; color: #2c3e6b; margin-top: 20px; }
+  p  { margin: 8px 0; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 12px 0;
+    font-size: 10pt;
+  }
+  th {
+    background: #4a90d9;
+    color: #fff;
+    padding: 7px 10px;
+    text-align: left;
+    font-weight: bold;
+  }
+  td {
+    border: 1px solid #ccc;
+    padding: 6px 10px;
+    vertical-align: top;
+  }
+  tr:nth-child(even) td { background: #f5f8ff; }
+  pre, code {
+    font-family: "Courier New", Courier, monospace;
+    font-size: 9.5pt;
+    background: #f4f4f4;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+  }
+  pre {
+    padding: 12px 16px;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    margin: 10px 0;
+  }
+  code { padding: 1px 4px; }
+  blockquote {
+    border-left: 4px solid #4a90d9;
+    margin: 12px 0;
+    padding: 6px 16px;
+    background: #f0f5ff;
+    color: #444;
+  }
+  ul, ol { margin: 8px 0; padding-left: 24px; }
+  li { margin: 4px 0; }
+  .oneliner {
+    background: #e8f0fe;
+    border-left: 4px solid #4a90d9;
+    padding: 10px 16px;
+    margin: 12px 0;
+    font-style: italic;
+  }
+  .note {
+    background: #fff8e1;
+    border-left: 4px solid #f9a825;
+    padding: 8px 14px;
+    margin: 10px 0;
+    font-size: 10pt;
+  }
+  hr { border: none; border-top: 1px solid #ddd; margin: 24px 0; }
+</style>
+</head>
+<body>
+
+<h1>RouteIQ — Week 3 Submission</h1>
+
+<h2>Project Overview</h2>
+
+<p>RouteIQ Week 3 adds a true agentic system on top of the Week 2 GraphRAG route planner: a <strong>Day Trip Planner</strong> powered by a LangGraph ReAct agent with human-in-the-loop review, a multi-source ratings layer, and dynamic knowledge graph expansion.</p>
+
+<p><strong>The one-liner:</strong></p>
+<div class="oneliner">
+My agent helps a traveler plan a full-day city itinerary in a Streamlit web app, replacing the 45-minute manual workflow of cross-referencing TripAdvisor, Google Maps, and Wikipedia. It finds OSM POIs, enriches them with ratings and visitor reviews, fetches Wikipedia facts, and schedules stops in road-time order autonomously using 5 tools — then pauses for human review before generating the narrative — and I'll know it works when a user can go from "Plan a day in San Francisco" to an approved, map-rendered itinerary with stop cards in under 60 seconds.
+</div>
+
+<hr>
+
+<h2>What This Week Adds (Agent Layer)</h2>
+
+<table>
+  <tr><th>Property</th><th>Week 2 pipeline</th><th>Week 3 agent</th></tr>
+  <tr><td>Control flow</td><td>Fixed: parse → graph → rag → narrate</td><td>Dynamic: LLM decides which tools to call and in what order</td></tr>
+  <tr><td>Stop selection</td><td>Deterministic spatial join + scorer</td><td>LLM reasons about time budget, preferences, geographic variety</td></tr>
+  <tr><td>Multi-turn</td><td>One-shot</td><td>MemorySaver: "remove museums, add beaches" refines the same session</td></tr>
+  <tr><td>Human feedback</td><td>None</td><td><code>interrupt_before=["review"]</code>: user approves or refines draft before narrative generates</td></tr>
+  <tr><td>Replanning</td><td>No</td><td>Agent loops back if user requests changes; full prior tool history preserved</td></tr>
+</table>
+
+<hr>
+
+<h2>Part 1: Agent Framework</h2>
+
+<h3>Agent Goal</h3>
+<p>Build a day-trip itinerary for a user-specified city using real OSM POI data, quality ratings, and Wikipedia facts — scheduled in road-time order — with a human review interrupt before the final narrative is written.</p>
+
+<h3>Where it runs</h3>
+<p>Streamlit web app (Tab 1 — Day Trip Planner).</p>
+
+<h3>Steps in order</h3>
+<ol>
+  <li><strong>Pre-flight: KG warm-up</strong> — check if city is already indexed; if not, Overpass fetch + <code>kg.add_city_pois()</code>.</li>
+  <li><strong>Plan node (ReAct loop):</strong> <code>find_city_pois</code> → <code>rate_pois</code> → <code>enrich_poi_details</code> → <code>estimate_visit_duration</code> → structured Pydantic extraction → <code>_schedule_stops</code> (A* road routing).</li>
+  <li><strong>Review node:</strong> <code>interrupt()</code> — graph pauses, Streamlit renders draft stop cards + map.</li>
+  <li><strong>Human decides:</strong> Approve → narrate; Refine (free text) → plan (re-enters with feedback); Re-plan → full restart.</li>
+  <li><strong>Narrate node:</strong> LLM generates 3–4 sentence trip narrative from approved itinerary + conversation history.</li>
+</ol>
+
+<h3>Tools</h3>
+<table>
+  <tr><th>Tool</th><th>Type</th><th>Data source</th></tr>
+  <tr><td><code>find_city_pois(city, categories)</code></td><td>READ</td><td>OSM via <code>RouteKnowledgeGraph</code> (in-memory)</td></tr>
+  <tr><td><code>rate_pois(city, poi_list_json)</code></td><td>READ</td><td>RatingsFactory dispatcher — TripAdvisor and Foursquare adapters implemented; <strong>current active provider: LLM Synthetic</strong></td></tr>
+  <tr><td><code>enrich_poi_details(poi_name, city)</code></td><td>READ</td><td>Wikipedia MediaWiki API</td></tr>
+  <tr><td><code>estimate_visit_duration(category, subtype)</code></td><td>READ</td><td>Internal lookup table</td></tr>
+  <tr><td><code>search_poi_by_name(name, city)</code></td><td>READ</td><td>Nominatim geocoder (on refine only)</td></tr>
+</table>
+<p>All tools are READ-only. The only WRITE action is the approved itinerary rendered to Streamlit — no external state is modified.</p>
+
+<h3>What it remembers</h3>
+<p>Full <code>DayTripState</code> (messages + draft itinerary + approval status) checkpointed by <code>MemorySaver</code> after every node. Each LangGraph thread is one planning session; state persists across plan→review→plan refinement loops within the session.</p>
+
+<h3>What it must never do</h3>
+<ul>
+  <li>Invent POIs not returned by <code>find_city_pois</code>.</li>
+  <li>Invent visitor quotes not found in <code>all_snippets</code> from the ratings tool.</li>
+  <li>Invent Wikipedia facts not in the <code>enrich_poi_details</code> response.</li>
+  <li>Calculate its own travel times between stops (road-based scheduling is handled in code by <code>_schedule_stops</code> after extraction).</li>
+</ul>
+
+<h3>Human-in-the-loop</h3>
+<p><code>interrupt_before=["review"]</code> pauses the graph after plan extraction. User sees draft stop cards and map. Free-text feedback re-enters the plan node with full conversation history appended as a <code>HumanMessage</code>. No narrative is generated until the user explicitly approves.</p>
+
+<h3>Error handling</h3>
+<ul>
+  <li><code>OverpassUnavailableError</code> in pre-flight: surfaced as <code>st.warning()</code>, agent does not start.</li>
+  <li>Tool returns empty list: LLM falls back to available POIs and notes reduced selection.</li>
+  <li><code>GraphInterrupt</code> from <code>interrupt_before</code>: caught explicitly in Streamlit threads — this is the expected success signal, not an error.</li>
+  <li><code>NullRatingProvider</code> fallback: agent works without any ratings API key; POIs ranked by KG notability only.</li>
+</ul>
+
+<h3>How I know it worked</h3>
+<p>User goes from empty form → approved stop cards with ratings, visitor reviews, and Wikipedia descriptions (+ thumbnail images) → map-rendered narrative in under 60 seconds for pre-seeded Bay Area cities.</p>
+<p>The UI shows three live metrics after planning completes: <strong>planning time</strong>, <strong>tool call count</strong> (derived from <code>ToolMessage</code> instances in the LangGraph snapshot), and <strong>stop count</strong>. A typical SF run: 42 s · 22 tool calls · 8 stops.</p>
+<p>LangSmith tracing is active (<code>LANGCHAIN_TRACING_V2=true</code>, project <code>routeiq-week3</code>). Every agent run produces a full trace in the LangSmith dashboard — tool call sequence, token usage per node, and latency breakdown — confirming the agent's reasoning path matches the expected ReAct pattern.</p>
+
+<hr>
+
+<h2>Part 2: Architecture</h2>
+
+<pre>
+User query (city · interests · hours · start time)
+    │
+    ▼  Pre-flight (app.py)
+    │  kg.known_cities() → if new city: Overpass fetch → kg.add_city_pois()
+    │
+    ▼  LangGraph graph (MemorySaver checkpointer)
+    │
+    ├── plan node (ReAct loop)
+    │     LLM + bind_tools(5 tools)
+    │     while pending tool calls:
+    │       execute tool → append ToolMessage
+    │     → with_structured_output(DayTripItinerary)  [Pydantic validation]
+    │     → _schedule_stops(A* road routing)           [code, not LLM]
+    │
+    ├── review node  ← interrupt_before
+    │     interrupt(draft_itinerary)                    [graph pauses]
+    │     Streamlit renders draft map + stop cards
+    │     user: Approve / Refine / Re-plan
+    │     Command(goto="narrate") or Command(goto="plan")
+    │
+    └── narrate node
+          LLM generates 3–4 sentence trip narrative
+          → Streamlit renders final map + cards + narrative
+</pre>
+
+<h3>Two-phase plan node (key design decision)</h3>
+<p>The plan node cannot use a single LLM call for both the ReAct loop and structured output extraction. <code>bind_tools()</code> enables free-form tool calling; <code>with_structured_output(DayTripItinerary)</code> enforces Pydantic validation. These modes conflict — the model cannot freely call tools while also being constrained to produce a specific JSON schema in the same call.</p>
+<p>Solution: run them in sequence.</p>
+<ol>
+  <li>Phase 1 — <code>bind_tools</code>: LLM runs ReAct tool loop until no pending calls.</li>
+  <li>Phase 2 — <code>with_structured_output(DayTripItinerary)</code>: separate LLM call with full tool history as context → validated Pydantic itinerary.</li>
+</ol>
+
+<h3>Knowledge Graph expansion (why it's architecturally important)</h3>
+<p><code>find_city_pois</code> queries <code>RouteKnowledgeGraph.get_pois_for_city()</code> — always in-memory, always instant, no network call inside the agent. But the KG needs to have the city indexed first.</p>
+<p>For cities outside the Bay Area pre-seed:</p>
+<ol>
+  <li><code>app.py</code> checks <code>kg.known_cities()</code> before starting the agent.</li>
+  <li>If the city is missing: Overpass fetch → <code>kg.add_city_pois(city, lat, lon, pois)</code>.</li>
+  <li><code>get_kg()</code> singleton ensures all tools share the same in-memory graph — dynamic expansion is visible to <code>find_city_pois</code> immediately.</li>
+</ol>
+<p><strong>Critical invariant:</strong> <code>find_city_pois</code> must call <code>get_kg()</code> (singleton), never <code>RouteKnowledgeGraph()</code> (new instance). A fresh instance would not contain the dynamically added city.</p>
+
+<hr>
+
+<h2>Part 3: Datasets</h2>
+
+<table>
+  <tr><th>Source</th><th>What</th><th>Volume</th></tr>
+  <tr><td>OpenStreetMap via Overpass</td><td>POI metadata (name, lat/lon, OSM category/subtype, wikipedia tag)</td><td>Pre-seeded: 984 Bay Area POIs in <code>bay_area_all.json.gz</code>; any city on demand</td></tr>
+  <tr><td>Wikipedia MediaWiki API</td><td>Landmark intro text (≤500 chars) + thumbnail image URL</td><td>Fetched per POI by <code>enrich_poi_details</code> tool</td></tr>
+  <tr><td><strong>LLM Synthetic (Claude) — current active</strong></td><td>Claude-generated ratings, review snippets, and visitor quotes per POI</td><td>Disk-cached 21 days per city; active because live provider access is unavailable</td></tr>
+  <tr><td>TripAdvisor Content API — <em>implemented, inactive</em></td><td>Ratings, up to 3 reviews (≥80 chars, sorted by HELPFUL), up to 5 photos</td><td>Adapter fully built; inactive — API key returned HTTP 403 (IAM deny)</td></tr>
+  <tr><td>Foursquare Places API — <em>implemented, inactive</em></td><td>Ratings (0–10 → normalized 0–5), tips, hours</td><td>Adapter fully built; inactive — v3 endpoint retired (404), v2 lacks ratings on free tier</td></tr>
+  <tr><td>RouteKnowledgeGraph</td><td>112+ nodes: POI, City, Region, Category; 4 typed edge types</td><td>Pre-seeded Bay Area; expanded on demand for new cities</td></tr>
+</table>
+
+<div class="note">
+  <strong>Current runtime configuration:</strong> <code>RATING_PROVIDER=llm_synthetic</code>. TripAdvisor and Foursquare adapters are fully implemented and tested in <code>routeiq/ratings/</code>; switching either live is a one-env-var change once API access is granted.
+</div>
+
+<h3>Ratings — composite score formula</h3>
+<pre>
+score = 0.4 × (rating / 5.0)
+      + 0.3 × log(1 + review_count) / log(1 + 10000)
+      + 0.3 × (0.1 if wikipedia_tag else 0.0)
+</pre>
+<p>POIs with <code>rating &lt; 3.8</code> AND <code>review_count &lt; 20</code> are dropped before scoring. Top 30 returned to the LLM for final preference-based selection of 8–10 stops.</p>
+
+<h3>Why three data sources</h3>
+<table>
+  <tr><th>Layer</th><th>Source</th><th>Provides</th><th>Why not replace with others?</th></tr>
+  <tr><td>Geographic</td><td>OSM (via KG)</td><td>All city POIs — complete, exact lat/lon, categories</td><td>TripAdvisor returns only ~50 "attractions" and misses parks, viewpoints, smaller historic sites</td></tr>
+  <tr><td>Social quality</td><td>TripAdvisor / Foursquare <em>(adapters implemented; LLM Synthetic currently active)</em></td><td>Ratings, visitor reviews, and quotes</td><td>OSM has no quality signal — without ratings all 80–150 POIs rank equally</td></tr>
+  <tr><td>Factual knowledge</td><td>Wikipedia</td><td>Citable facts for <code>why_visit</code>, thumbnail image</td><td>Reviews are opinions; Wikipedia provides grounded facts</td></tr>
+</table>
+
+<hr>
+
+<h2>Part 4: Prompts</h2>
+
+<h3>Day Trip Planner system prompt (verbatim, active)</h3>
+<pre>
+You are a day-trip itinerary planner. You build realistic, geographically ordered
+itineraries for a single city using real POI data from tools.
+
+Faithfulness rules — enforce strictly:
+- visitor_quote: pick the single most vivid sentence from all_snippets; prefix with the
+  review_source name (e.g. "Visitors on TripAdvisor say: '...'"). Never invent a quote.
+- visitor_summary: write 1–2 sentences synthesizing the overall sentiment across all
+  snippets in all_snippets. Ground every claim in the snippets — do not invent details.
+- why_visit: one factual sentence sourced only from the POI's Wikipedia description.
+  Never invent facts.
+- activities: derive only from the Wikipedia description AND review snippets. Use the
+  POI's OSM subtype as a last-resort fallback for one generic activity.
+  Never invent activities.
+- Schedule stops in geographic order to minimize travel time between them.
+- Output ONLY the JSON block — no markdown fences, no commentary, no explanation.
+</pre>
+
+<p><strong>Design rationale:</strong> Faithfulness rules are enumerated field-by-field because each field has a different source of truth. A single "don't hallucinate" instruction leaves the model guessing which field to ground in which source. Explicit per-field rules eliminate ambiguity.</p>
+
+<hr>
+
+<h3>Day Trip Planner human prompt (verbatim, active)</h3>
+<pre>
+Plan a {hours}-hour day trip in {city} starting at {start_time}.
+Preferences: {preferences}
+
+Tool call order:
+1. find_city_pois — get POIs for the city
+2. rate_pois — enrich with ratings and reviews; keep top candidates
+3. enrich_poi_details — fetch Wikipedia context for the top 8 POIs
+4. estimate_visit_duration — get visit duration per stop subtype
+
+Your job is to SELECT the best 8–10 stops that match the preferences and variety of
+experience. Do NOT try to calculate travel times or fit stops within the time budget
+yourself — road-based scheduling is handled automatically after you output the itinerary.
+Set arrival_time and departure_time to placeholder values ("TBD"); they will be replaced.
+
+Output format (JSON only, no fences):
+{
+  "city": "{city}",
+  "date": "today",
+  "total_hours": {hours},
+  "stops": [
+    {
+      "order": 1,
+      "name": "&lt;POI name&gt;",
+      "category": "&lt;OSM category&gt;",
+      "lat": 0.0, "lon": 0.0,
+      "arrival_time": "TBD", "departure_time": "TBD",
+      "visit_duration_min": 90,
+      "why_visit": "&lt;one factual Wikipedia sentence&gt;",
+      "visitor_quote": "&lt;review_source&gt;: '&lt;single most vivid snippet from all_snippets&gt;'",
+      "visitor_summary": "&lt;1-2 sentence synthesis of overall sentiment from all_snippets&gt;",
+      "activities": ["&lt;activity 1&gt;", "&lt;activity 2&gt;"],
+      "rating": 4.5, "review_count": 1200,
+      "review_source": "&lt;TripAdvisor | Foursquare | Unknown&gt;",
+      "photo_urls": ["&lt;url1&gt;", "&lt;url2&gt;"],
+      "image_url": "&lt;Wikipedia thumbnail fallback&gt;",
+      "hours": "&lt;opening hours string or null&gt;"
+    }
+  ],
+  "narrative": null
+}
+</pre>
+
+<p><strong>Key design note:</strong> "Set arrival_time and departure_time to placeholder values ('TBD'); they will be replaced" is the most important instruction. Without it, the LLM either tries to calculate road travel times itself (and fails) or leaves times at <code>null</code>, crashing the Pydantic validator. Separating LLM selection from code-based scheduling was the fix.</p>
+
+<hr>
+
+<h3>Route Planner narrative prompt evolution (carried from Week 2)</h3>
+<p>Three generations — the Week 2 narrative prompt is included for continuity:</p>
+<p><strong>V1</strong> — hallucinated visit reasons (no description context)<br>
+<strong>V2</strong> — Wikipedia-enriched: grounded in real landmark text<br>
+<strong>V3</strong> — KG-enriched (active): city + region + nearby stops added</p>
+
+<pre>
+Generate a scenic route narrative for the following trip.
+
+Origin: {origin}
+Destination: {destination}
+Total distance: {distance_km} km
+Estimated drive time: {drive_time_min} minutes
+
+Recommended stops (graph-verified: spatially on route, Wikipedia-enriched):
+{poi_context}
+
+Each stop is formatted as:
+  name | category | city | region | nearby stops | description excerpt
+
+Instructions:
+- Write an engaging opening narrative (3-5 sentences) that captures the character
+  of the route and region.
+- List each stop: name | detour time | one sentence why to visit, drawn from the description.
+- Mention the region where it adds flavour (e.g. "deep in the Hill Country").
+- Ground every fact in the provided context. Do not invent locations or distances.
+</pre>
+
+<hr>
+
+<h2>Part 5: Iterations</h2>
+
+<h3>1. LLM tried to calculate travel times</h3>
+<p><strong>Problem:</strong> The agent was given the full output schema including <code>arrival_time</code> and <code>departure_time</code>. The LLM tried to calculate road travel times itself, producing wildly inaccurate schedules (20 minutes to cross San Francisco).</p>
+<p><strong>Fix:</strong> Added explicit instruction "Do NOT try to calculate travel times — road-based scheduling is handled automatically after you output the itinerary. Set arrival_time and departure_time to 'TBD'." <code>_schedule_stops()</code> in code runs A* routing after Pydantic extraction and fills in real road times.</p>
+<p><strong>Learning:</strong> Don't ask the LLM to do what code does better. Separate LLM judgment (which stops to include) from deterministic computation (road-time scheduling).</p>
+
+<h3>2. <code>interrupt_before</code> vs <code>interrupt()</code> inside the node</h3>
+<p><strong>Problem:</strong> Using <code>interrupt_before=["review"]</code> raises <code>GraphInterrupt</code> when the plan node transitions to the review node. Streamlit threads caught this as an unhandled exception, causing the "first-run no draft" symptom.</p>
+<p><strong>Fix:</strong> Caught <code>GraphInterrupt</code> explicitly in both <code>_run_dt_planning_thread</code> and <code>_run_dt_refine_thread</code> as the expected success signal — not an error.</p>
+<p><strong>Learning:</strong> LangGraph's <code>interrupt_before</code> is a first-class control flow mechanism, not an exception in the traditional sense. All callers of <code>graph.stream()</code> need to expect and handle <code>GraphInterrupt</code>.</p>
+
+<h3>3. <code>get_kg()</code> singleton vs <code>RouteKnowledgeGraph()</code> new instance</h3>
+<p><strong>Problem:</strong> <code>find_city_pois</code> tool was instantiating <code>RouteKnowledgeGraph()</code> directly. Pre-flight in <code>app.py</code> called <code>get_kg().add_city_pois()</code> on the singleton. The tool saw a fresh instance with no dynamically added cities — always returning empty POI lists for out-of-area cities.</p>
+<p><strong>Fix:</strong> <code>find_city_pois</code> calls <code>get_kg()</code> (singleton function, returns the process-wide shared instance).</p>
+<p><strong>Learning:</strong> In a multi-component system with shared in-memory state, the singleton pattern must be enforced everywhere. One caller using <code>new Instance()</code> breaks the invariant silently.</p>
+
+<h3>4. <code>ox.geocode("Oakland, CA")</code> → Canada</h3>
+<p><strong>Problem:</strong> Nominatim resolved "Oakland, CA" to Oakland, Ontario, Canada. The route bbox was in Canada, no Bay Area POIs fell within it, and the agent returned an empty itinerary.</p>
+<p><strong>Fix:</strong> <code>_schedule_stops</code> uses the stop centroid derived from A* routing (already in the Bay Area) as the bbox anchor, not <code>ox.geocode(city)</code>.</p>
+<p><strong>Learning:</strong> Nominatim abbreviation handling is inconsistent — "CA" can resolve to California or Canada depending on query phrasing. Never geocode by city name when you already have coordinates from another source.</p>
+
+<h3>5. OSM→provider name matching via ChromaDB</h3>
+<p><strong>Problem:</strong> String matching between OSM names ("de Young Museum") and TripAdvisor names ("de Young Fine Arts Museums of San Francisco") failed for ~40% of POI pairs.</p>
+<p><strong>Fix:</strong> ChromaDB embedding similarity for the initial merge pass; haversine proximity ≤100 m as a fallback for cases where names are completely different.</p>
+<p><strong>Learning:</strong> Name matching across geospatial data sources is an entity resolution problem, not a string comparison problem. Semantic embeddings handle abbreviations and partial names naturally. Reusing ChromaDB (already a project dependency) kept the solution simple.</p>
+<div class="note"><strong>Note:</strong> This matching logic is exercised when TripAdvisor or Foursquare is the active provider. With <code>LLMSyntheticRatingProvider</code> (current active), POI names are passed directly to the LLM — no cross-source name resolution is needed.</div>
+
+<h3>6. TripAdvisor key 403 IAM deny</h3>
+<p><strong>Problem:</strong> TripAdvisor Content API returned HTTP 403 for the live API key. The ratings layer had no fallback.</p>
+<p><strong>Fix:</strong> Added <code>LLMSyntheticRatingProvider</code> — Claude generates realistic ratings, snippets, and visitor quotes for any city, disk-cached with a 21-day TTL. Strategy pattern means it's a one-env-var swap (<code>RATING_PROVIDER=llm_synthetic</code>).</p>
+<p><strong>Learning:</strong> External API keys fail in production. The Strategy pattern with a graceful fallback provider is not nice-to-have — it's essential for demo reliability.</p>
+
+<h3>7. Foursquare v3 <code>/nearby</code> endpoint retired</h3>
+<p><strong>Problem:</strong> Foursquare's documented v3 endpoint returned HTTP 404. The adapter was built against docs that described a deprecated endpoint.</p>
+<p><strong>Fix:</strong> Switched to Foursquare v2 (<code>api.foursquare.com/v2/venues/search</code>). v2 doesn't include ratings on the free tier, so Foursquare became the secondary provider.</p>
+<p><strong>Learning:</strong> API documentation doesn't always reflect which version is actually live. Check response codes against a live API call before building an adapter, not just the docs.</p>
+
+<hr>
+
+<h2>Part 6: Reuse from Week 2</h2>
+
+<table>
+  <tr><th>Week 2 component</th><th>How reused in Week 3</th></tr>
+  <tr><td><code>POIFinder</code></td><td>Pre-flight <code>find_pois_in_bbox()</code> for out-of-area cities</td></tr>
+  <tr><td><code>WikipediaFetcher</code></td><td><code>enrich_poi_details</code> tool wraps <code>.enrich()</code></td></tr>
+  <tr><td><code>RouteKnowledgeGraph</code> + <code>get_kg()</code></td><td><code>find_city_pois</code> tool + <code>add_city_pois()</code> for dynamic KG expansion</td></tr>
+  <tr><td><code>MapBuilder</code></td><td>Renders final itinerary Folium map (AntPath route + numbered markers)</td></tr>
+  <tr><td><code>LLMFactory</code></td><td><code>create_llm()</code> injected into all AI components — swappable Anthropic/Nebius</td></tr>
+  <tr><td>ChromaDB</td><td>Reused ephemerally for OSM↔provider name merge in <code>rate_pois</code></td></tr>
+  <tr><td><code>cache/pois/bay_area_all.json.gz</code></td><td>Cache hit in <code>find_pois_in_bbox</code> for all Bay Area cities — zero Overpass calls in demo</td></tr>
+</table>
+
+<hr>
+
+<h2>Part 7: Key Learnings</h2>
+
+<h3>1. Separate LLM judgment from deterministic computation</h3>
+<p>The agent is good at selecting which stops to visit and why. It is bad at computing road travel times. Asking it to do both produced inaccurate schedules. The correct split: LLM selects and ranks stops → code handles scheduling. This generalizes: wherever you have a deterministic algorithm that produces a correct answer, don't ask the LLM to replicate it.</p>
+
+<h3>2. <code>interrupt_before</code> is control flow, not an error</h3>
+<p>LangGraph's <code>interrupt_before</code> pauses the graph at a node boundary. The resulting <code>GraphInterrupt</code> is the expected success signal — not an exception to be suppressed. Every caller of <code>graph.stream()</code> must handle it explicitly. Treating it as an unexpected error was the root cause of the first-run draft bug.</p>
+
+<h3>3. Singleton patterns must be enforced everywhere</h3>
+<p>In a multi-component system with shared in-memory state, one caller using <code>new Instance()</code> instead of <code>get_singleton()</code> silently breaks the state invariant. The bug where <code>find_city_pois</code> created a fresh KG instance — missing all dynamically added cities — was invisible until a non-Bay-Area city was tested. Guard singleton access at the module boundary, not just at initialization.</p>
+
+<h3>4. Strategy pattern for external providers is essential</h3>
+<p>Three providers (TripAdvisor, Foursquare, LLM synthetic) were tried, and each failed in a different way (403 IAM deny, retired endpoint, hallucination risk without disk cache). The Strategy pattern with <code>POIRatingProvider</code> ABC meant each failure was handled by swapping one env var — no code changes, no broken demos. Without it, each provider failure would have required a refactor of the ratings layer.</p>
+
+<h3>5. Entity resolution across geospatial data sources is non-trivial</h3>
+<p>OSM names and provider names for the same physical location can be semantically identical but lexically different ("de Young Museum" vs "de Young Fine Arts Museums of San Francisco"). String matching fails; embedding similarity handles it naturally. When two systems need to match the same entity by name, treat it as an entity resolution problem, not a string comparison.</p>
+
+<h3>6. External API dependencies break at demo time</h3>
+<p>TripAdvisor (403), Foursquare (404 on v3). Two of three planned providers failed before a single demo query ran. The lesson: always build the synthetic/mock fallback before connecting the live API, so the system is demo-ready before the key activates.</p>
+
+<h3>7. Graceful pre-flight beats graceful degradation inside the agent</h3>
+<p>Checking <code>kg.known_cities()</code> and running the Overpass fetch before the agent starts (with a Streamlit spinner) is far better UX than having the agent fail mid-tool-call because the KG is empty. Pre-flight is the pattern: validate dependencies before handing control to the agent, not during.</p>
+
+<h3>8. Observability is how you verify an agent actually did what you think</h3>
+<p>The ReAct loop runs inside a background thread. Without tracing, there's no way to know which tool was called when, what it returned, or which LLM call consumed most of the latency. LangSmith (<code>LANGCHAIN_TRACING_V2=true</code>) solved this: every planning run produces a trace with the full tool call sequence, token counts per node, and per-step latency. This revealed that <code>enrich_poi_details</code> accounts for ~60% of planning time (one Wikipedia API call per POI candidate, executed serially) and that the LLM consistently calls it for 10–12 candidates before settling on 8 stops. That's not visible from the UI alone — you only see the end result, not the reasoning path.</p>
+
+<hr>
+
+<h2>Part 8: Tech Stack</h2>
+
+<table>
+  <tr><th>Component</th><th>Tool</th><th>Purpose</th></tr>
+  <tr><td>Agent framework</td><td>LangGraph (StateGraph + MemorySaver)</td><td>ReAct loop + human-in-the-loop interrupt + multi-turn state</td></tr>
+  <tr><td>LLM</td><td>Claude Sonnet 4.6 via LangChain</td><td>Plan node (ReAct + structured extraction) + narrate node</td></tr>
+  <tr><td>LLM alternative</td><td>Nebius Token Factory (OpenAI-compatible)</td><td>Dev/testing; <code>LLM_PROVIDER=nebius</code> env var swap</td></tr>
+  <tr><td>Road network</td><td>OSMnx + NetworkX</td><td>A* pathfinding for stop scheduling</td></tr>
+  <tr><td>POI data</td><td>OpenStreetMap via Overpass</td><td>Geographic completeness for any city</td></tr>
+  <tr><td>Ratings — <strong>current active</strong></td><td>LLM Synthetic (Claude)</td><td>Generates ratings, review snippets, and visitor quotes per POI; disk-cached 21 days</td></tr>
+  <tr><td>Ratings — TripAdvisor <em>(implemented)</em></td><td>TripAdvisor Content API</td><td>Adapter complete; inactive — API key returned HTTP 403</td></tr>
+  <tr><td>Ratings — Foursquare <em>(implemented)</em></td><td>Foursquare v2</td><td>Adapter complete; inactive — v3 retired, v2 lacks ratings on free tier</td></tr>
+  <tr><td>Knowledge graph</td><td>NetworkX DiGraph + <code>get_kg()</code> singleton</td><td>POI/City/Region typed edges; dynamic expansion</td></tr>
+  <tr><td>Name matching</td><td>ChromaDB (ephemeral)</td><td>OSM↔provider name entity resolution</td></tr>
+  <tr><td>Map rendering</td><td>Folium + AntPath</td><td>Animated route + numbered markers</td></tr>
+  <tr><td>UI</td><td>Streamlit</td><td>Two-tab app; background threads for agent streaming</td></tr>
+  <tr><td>Observability</td><td>LangSmith (<code>routeiq-week3</code> project)</td><td>Full agent traces: tool call sequence, token usage per node, per-step latency</td></tr>
+  <tr><td>Testing</td><td>pytest</td><td>213 tests across 22 files</td></tr>
+</table>
+
+</body>
+</html>
