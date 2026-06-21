@@ -4,12 +4,17 @@ import networkx as nx
 from routeiq.graph.route_result import RouteResult
 
 
-class RouteGraph:
-    """Finds shortest paths on an OSM road network using A* with haversine heuristic (Strategy pattern)."""
+# Fastest road type in OSM (motorway) defaults to 130 km/h = 36.11 m/s.
+# Dividing haversine distance by this gives an admissible (never-overestimating)
+# travel_time heuristic for A* when weight="travel_time" (seconds).
+_MAX_SPEED_MS = 130.0 / 3.6
 
-    def __init__(self, graph: nx.MultiDiGraph, avg_speed_kmh: float = 50.0):
+
+class RouteGraph:
+    """Finds fastest paths on an OSM road network using A* with per-edge travel times (Strategy pattern)."""
+
+    def __init__(self, graph: nx.MultiDiGraph):
         self._graph = graph
-        self._avg_speed_kmh = avg_speed_kmh
 
     def find_route(
         self,
@@ -27,7 +32,7 @@ class RouteGraph:
                 orig,
                 dest,
                 heuristic=self._haversine_heuristic,
-                weight="length",
+                weight="travel_time",
             )
         except nx.NetworkXNoPath:
             raise ValueError(
@@ -35,8 +40,7 @@ class RouteGraph:
             )
 
         length_m = nx.path_weight(self._graph, route_nodes, weight="length")
-        length_km = length_m / 1000.0
-        drive_time_min = (length_km / self._avg_speed_kmh) * 60.0
+        travel_time_s = nx.path_weight(self._graph, route_nodes, weight="travel_time")
         route_coords = [
             (self._graph.nodes[n]["y"], self._graph.nodes[n]["x"]) for n in route_nodes
         ]
@@ -44,14 +48,16 @@ class RouteGraph:
         return RouteResult(
             route_nodes=route_nodes,
             route_coords=route_coords,
-            length_km=length_km,
-            drive_time_min=drive_time_min,
+            length_km=length_m / 1000.0,
+            drive_time_min=travel_time_s / 60.0,
         )
 
     def _haversine_heuristic(self, u: int, v: int) -> float:
-        return ox.distance.great_circle(
+        # Returns estimated travel time in seconds — consistent with weight="travel_time".
+        dist_m = ox.distance.great_circle(
             lat1=self._graph.nodes[u]["y"],
             lon1=self._graph.nodes[u]["x"],
             lat2=self._graph.nodes[v]["y"],
             lon2=self._graph.nodes[v]["x"],
         )
+        return dist_m / _MAX_SPEED_MS

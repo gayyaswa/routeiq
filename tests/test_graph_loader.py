@@ -7,6 +7,12 @@ import pytest
 from routeiq.graph import GraphLoader
 
 
+@pytest.fixture(autouse=True)
+def _no_enrich(monkeypatch):
+    """Patch out OSMnx edge enrichment — these tests verify caching, not speed attributes."""
+    monkeypatch.setattr("routeiq.graph.graph_loader.GraphLoader._enrich", lambda self, G: None)
+
+
 @pytest.fixture
 def tmploader(tmp_path):
     return GraphLoader(cache_dir=str(tmp_path))

@@ -94,25 +94,37 @@ Same convention applies to `features_from_bbox` in POIFinder.
 
 ## Step 4 — RouteGraph (Strategy pattern)
 
-**Constructor:** `__init__(self, graph: nx.MultiDiGraph, avg_speed_kmh: float = 50.0)`
-— graph is injected, never fetched internally.
+**Constructor:** `__init__(self, graph: nx.MultiDiGraph)`
+— graph is injected, never fetched internally. Edge `travel_time` attributes are expected
+to be present (added by `GraphLoader._enrich()` at load time).
 
 **`find_route(origin_lat, origin_lon, dest_lat, dest_lon) → RouteResult`**
 
 - Snap to nodes: `ox.distance.nearest_nodes(G, X=lon, Y=lat)` — note X=lon, Y=lat (common trap)
-- A* path: `nx.astar_path(G, orig, dest, heuristic=self._haversine_heuristic, weight="length")`
-- Path length: `nx.path_weight(G, route_nodes, weight="length")` — handles MultiDiGraph correctly
-- Drive time: `(length_km / avg_speed_kmh) * 60`
+- A* path: `nx.astar_path(G, orig, dest, heuristic=self._haversine_heuristic, weight="travel_time")`
+- Path length: `nx.path_weight(G, route_nodes, weight="length")` — in metres
+- Drive time: `nx.path_weight(G, route_nodes, weight="travel_time") / 60` — sum of per-edge seconds
 - No-path: catch `nx.NetworkXNoPath` → raise `ValueError` with descriptive message
 
-**Haversine heuristic:**
+**Edge enrichment (GraphLoader._enrich):**
 ```python
+ox.add_edge_speeds(G)       # fills speed_kph from maxspeed tag or road-type defaults
+ox.add_edge_travel_times(G) # travel_time = length / speed_kph  (seconds)
+```
+Called once per graph after load. Safe to call on an already-enriched graph (idempotent).
+
+**Haversine heuristic (returns seconds, not metres):**
+```python
+_MAX_SPEED_MS = 130.0 / 3.6  # 130 km/h = fastest OSM road type → admissible lower bound
+
 def _haversine_heuristic(self, u: int, v: int) -> float:
-    return ox.distance.great_circle(
+    dist_m = ox.distance.great_circle(
         lat1=self._graph.nodes[u]["y"], lon1=self._graph.nodes[u]["x"],
         lat2=self._graph.nodes[v]["y"], lon2=self._graph.nodes[v]["x"],
     )
+    return dist_m / _MAX_SPEED_MS
 ```
+Must be in the same unit as `weight` (seconds) for A* to be optimal.
 
 **Coord extraction:** `[(G.nodes[n]["y"], G.nodes[n]["x"]) for n in route_nodes]`
 

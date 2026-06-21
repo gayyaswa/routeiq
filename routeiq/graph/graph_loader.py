@@ -61,12 +61,14 @@ class GraphLoader:
 
         if os.path.exists(pkl_path):
             G = self._load_file(pkl_path)
+            self._enrich(G)
             self._registry[key] = G
             return G
 
         # Migrate legacy graphml to pickle on first access (~5x faster parse next time)
         if os.path.exists(graphml_path):
             G = ox.load_graphml(graphml_path)
+            self._enrich(G)
             self._save_pkl(G, pkl_path)
             self._registry[key] = G
             return G
@@ -76,6 +78,7 @@ class GraphLoader:
         containing = self._find_containing_cache(north, south, east, west)
         if containing:
             G = self._load_file(containing)
+            self._enrich(G)
             self._registry[key] = G
             return G
 
@@ -84,12 +87,23 @@ class GraphLoader:
             try:
                 ox.settings.overpass_url = mirror
                 G = ox.graph_from_bbox(bbox=(west, south, east, north), network_type=network_type)
+                self._enrich(G)
                 self._save_pkl(G, pkl_path)
                 self._registry[key] = G
                 return G
             except Exception as e:
                 last_err = e
         raise RuntimeError(f"All Overpass mirrors failed. Last error: {last_err}") from last_err
+
+    def _enrich(self, G: nx.MultiDiGraph) -> None:
+        """Add speed_kph and travel_time (seconds) to every edge using OSM maxspeed tags.
+
+        OSMnx fills missing maxspeed values with type-based defaults (motorway=130,
+        residential=30, etc.), so every edge gets a realistic speed even without an
+        explicit tag.  Calling this on an already-enriched graph is safe (idempotent).
+        """
+        ox.add_edge_speeds(G)
+        ox.add_edge_travel_times(G)
 
     def _load_file(self, path: str) -> nx.MultiDiGraph:
         if path.endswith(".pkl"):

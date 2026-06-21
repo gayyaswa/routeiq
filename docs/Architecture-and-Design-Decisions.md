@@ -31,11 +31,12 @@ Format: Decision → Why → Alternatives considered → Trade-offs accepted.
 **Alternatives considered:** No version pin (requires runtime shim to handle 1.x vs 2.x), pin to exact version `==2.x.y` (too brittle for patch updates).
 **Trade-off accepted:** Blocks install on Python environments where only osmnx 1.x is available — unlikely for a fresh install.
 
-### A* pathfinding with haversine heuristic
-**Decision:** Use `nx.astar_path()` with haversine straight-line distance as the heuristic.
-**Why:** A* explores toward the destination rather than spreading in all directions like Dijkstra. Haversine is admissible (never overestimates road distance) so A* is guaranteed to find the optimal path. Significantly faster than Dijkstra on large road networks (50k+ nodes).
-**Alternatives considered:** Dijkstra (`nx.shortest_path(weight="length")`), Bellman-Ford, OSRM (external routing engine).
-**Trade-off accepted:** Haversine heuristic quality degrades in areas with high road curvature (mountains). Acceptable for the flat Texas corridor.
+### A* pathfinding with per-edge travel times
+**Decision:** Use `nx.astar_path()` with `weight="travel_time"` (seconds per edge) and a haversine/max-speed heuristic. Edge travel times are computed once at graph-load time via `ox.add_edge_speeds()` + `ox.add_edge_travel_times()`.
+**Why:** A* with `weight="length"` finds the *shortest* road in meters, which is not the same as the *fastest* route — a longer highway is often faster than a short residential street. OSMnx fills each edge with a `speed_kph` derived from the OSM `maxspeed` tag (falling back to road-type defaults: motorway=130, residential=30, etc.) and computes `travel_time = length / speed_kph` in seconds. Summing these gives realistic drive-time estimates without a flat global average.
+**Heuristic:** `haversine_distance_m / 36.11 m/s` (130 km/h = fastest OSM road type). This is admissible — it never overestimates travel time — so A* is still guaranteed optimal.
+**Alternatives considered:** `weight="length"` + flat 50 km/h (fast but inaccurate for mixed road types), OSRM (accurate but requires a running server), flat-speed per road class (approximation, more complex than OSMnx's built-in).
+**Trade-off accepted:** `add_edge_speeds` runs in-memory on every graph load (~50–200 ms for a city-scale graph). Results are not persisted to the pkl cache, so the cost is paid once per process startup. Acceptable for a local demo.
 
 ### Shapely buffer for POI spatial join
 **Decision:** Buffer the route LineString by `buffer_km/111` degrees, then test POI centroids with `.contains()`.

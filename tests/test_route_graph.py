@@ -8,7 +8,10 @@ from routeiq.graph import RouteGraph, RouteResult
 
 
 def _build_graph() -> nx.MultiDiGraph:
-    """Linear 5-node graph: 0→1→2→3→4, plus isolated node 5."""
+    """Linear 5-node graph: 0→1→2→3→4, plus isolated node 5.
+
+    Each edge: length=1000 m, travel_time=72 s (≈ 50 km/h = 13.89 m/s).
+    """
     G = nx.MultiDiGraph()
     coords = [
         (0, -98.0, 29.50),
@@ -21,13 +24,13 @@ def _build_graph() -> nx.MultiDiGraph:
     for node_id, lon, lat in coords:
         G.add_node(node_id, x=lon, y=lat)
     for u, v in [(0, 1), (1, 2), (2, 3), (3, 4)]:
-        G.add_edge(u, v, length=1000)
+        G.add_edge(u, v, length=1000, travel_time=72.0)
     return G
 
 
 @pytest.fixture
 def rg():
-    return RouteGraph(_build_graph(), avg_speed_kmh=50.0)
+    return RouteGraph(_build_graph())
 
 
 class TestRouteGraphFindRoute:
@@ -52,11 +55,12 @@ class TestRouteGraphFindRoute:
             result = rg.find_route(29.50, -98.0, 29.56, -97.6)
         assert result.length_km > 0
 
-    def test_drive_time_derived_from_length(self, rg):
+    def test_drive_time_derived_from_travel_time_edges(self, rg):
+        # 4 edges × 72 s each = 288 s total = 4.8 min
         with patch("osmnx.distance.nearest_nodes", side_effect=[0, 4]):
             result = rg.find_route(29.50, -98.0, 29.56, -97.6)
-        expected = (result.length_km / 50.0) * 60.0
-        assert math.isclose(result.drive_time_min, expected, rel_tol=1e-9)
+        expected_min = (4 * 72.0) / 60.0
+        assert math.isclose(result.drive_time_min, expected_min, rel_tol=1e-9)
 
     def test_length_km_equals_four_edges(self, rg):
         # 4 edges × 1000 m = 4 km
