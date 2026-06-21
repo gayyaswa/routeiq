@@ -176,7 +176,11 @@ def _schedule_stops(
         from routeiq.graph.graph_loader import GraphLoader
         from routeiq.graph.route_graph import RouteGraph
 
-        start_min = _timestr_to_minutes(start_time) or 9 * 60.0
+        parsed_min = _timestr_to_minutes(start_time)
+        logger.info("_schedule_stops: start_time=%r parsed_min=%s", start_time, parsed_min)
+        start_min = parsed_min or 9 * 60.0
+        if parsed_min is None:
+            logger.warning("_schedule_stops: could not parse start_time=%r, falling back to 9:00 AM", start_time)
         budget_min = time_budget_hours * 60.0
 
         # Prefer stop centroid — coords come from OSM/Overpass via find_city_pois,
@@ -313,7 +317,8 @@ def _plan(state: DayTripState, config: Optional[RunnableConfig] = None) -> dict:
     """ReAct tool loop, then a structured-output call to extract the validated itinerary."""
     t0 = time.perf_counter()
     thread_id: str = ((config or {}).get("configurable") or {}).get("thread_id", "")
-    logger.debug("_plan start city=%s", state["city"])
+    logger.info("_plan start city=%s start_time=%r messages_in_state=%d",
+                state["city"], state.get("start_time"), len(state["messages"]))
     llm = create_llm()
     llm_with_tools = llm.bind_tools(ALL_TOOLS)
 
@@ -338,6 +343,9 @@ def _plan(state: DayTripState, config: Optional[RunnableConfig] = None) -> dict:
                 f"updated preferences above, then rebuild the itinerary from the new results."
             ))
 
+    logger.info("_plan phase=fresh_run=%s prompt_messages=%d",
+                not bool(state["messages"]), len(messages))
+
     # Phase 1 — ReAct loop: execute tools until the LLM stops calling them
     max_iterations = 12
     for iteration in range(max_iterations):
@@ -345,7 +353,21 @@ def _plan(state: DayTripState, config: Optional[RunnableConfig] = None) -> dict:
         messages.append(response)
 
         if not response.tool_calls:
-            logger.debug("ReAct loop iter=%d no tool calls → stopping", iteration)
+            if iteration == 0:
+                # LLM skipped tools entirely on the very first call — this produces
+                # empty tool results and a useless itinerary.  Nudge once and retry.
+                logger.warning(
+                    "ReAct loop iter=0 no tool calls (response_len=%d) — nudging LLM to call tools",
+                    len(response.content or ""),
+                )
+                messages.pop()  # discard the tool-free response
+                messages.append(HumanMessage(
+                    content="You must call find_city_pois first to discover POIs for this city. "
+                            "Please call the tools now — do not describe the plan, just call the tools."
+                ))
+                continue
+            logger.info("ReAct loop iter=%d no tool calls → stopping (response_len=%d)",
+                        iteration, len(response.content or ""))
             break
 
         tool_names = [tc["name"] for tc in response.tool_calls]
@@ -372,12 +394,19 @@ def _plan(state: DayTripState, config: Optional[RunnableConfig] = None) -> dict:
     ) or "No tool results available."
 
     # Carry refinement feedback into the extraction prompt so the LLM applies it.
+    # Start-time changes are not supported via refine — they require a fresh plan —
+    # so strip them from the feedback to avoid contradicting state["start_time"].
+    import re as _re
     refinement_feedback = next(
         (m.content.split("Refine itinerary:", 1)[-1].split("\n\n")[0].strip()
          for m in reversed(messages)
          if isinstance(m, HumanMessage) and "Refine itinerary:" in m.content),
         None,
     )
+    if refinement_feedback and _re.search(r"\b(start|begin|starting)\b.{0,20}\b(at|from)\b.{0,10}\b\d{1,2}(:\d{2})?\s*(am|pm)\b", refinement_feedback, _re.IGNORECASE):
+        logger.warning("_plan: refinement_feedback contains a start-time change (%r) — "
+                       "ignoring it; start_time changes require a fresh plan run.", refinement_feedback)
+        refinement_feedback = None
     refinement_note = (
         f"\nUser refinement request: \"{refinement_feedback}\"\n"
         f"IMPORTANT: Apply this refinement — include stops matching the updated preferences "
@@ -460,13 +489,15 @@ def _review(state: DayTripState) -> Command:
 def _narrate(state: DayTripState) -> dict:
     """Generate a warm 3–4 sentence narrative introduction for the day trip."""
     llm = create_llm()
-    stop_names = [s["name"] for s in (state["draft_itinerary"] or {}).get("stops", [])][:3]
+    stops = (state["draft_itinerary"] or {}).get("stops", [])
+    stop_names = [s["name"] for s in stops]
     prompt = (
         f"Write a warm, engaging 3–4 sentence narrative introducing this day trip to "
-        f"{state['city']}. Mention these stops: {', '.join(stop_names)}. "
+        f"{state['city']}. The approved stops for today are: {', '.join(stop_names)}. "
+        "Mention only stops from this list — do not mention any other places. "
         "Do not use bullet points or markdown headers."
     )
-    response = llm.invoke(list(state["messages"]) + [HumanMessage(content=prompt)])
+    response = llm.invoke([HumanMessage(content=prompt)])
     return {"narrative": response.content}
 
 

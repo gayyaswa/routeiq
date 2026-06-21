@@ -119,7 +119,53 @@ class POIFinder:
             with open(json_path) as f:
                 return [POI(**d) for d in json.load(f)]
 
+        # Before hitting Overpass, check if an existing cache file covers ≥ 70% of
+        # the requested bbox.  Nominatim can return slightly different centroids for
+        # the same city on different calls, shifting the bbox by a few km and causing
+        # a spurious cache miss (e.g. Los Angeles centroid drifting between runs).
+        overlap_path = self._find_overlapping_cache(bbox_poly)
+        if overlap_path is not None:
+            print(f"[timing]     poi bbox cache NEAR-HIT: {os.path.basename(overlap_path)}", flush=True)
+            if overlap_path.endswith(".gz"):
+                with gzip.open(overlap_path, "rb") as f:
+                    return [POI(**d) for d in json.loads(f.read())]
+            with open(overlap_path) as f:
+                return [POI(**d) for d in json.load(f)]
+
         return self._query_overpass(bbox_poly, gz_path, None, time.perf_counter())
+
+    def _find_overlapping_cache(self, requested_poly) -> str | None:
+        """Return a cache file path whose bbox is a near-match for requested_poly, or None.
+
+        Uses overlap / min(requested_area, cached_area) ≥ 90% as the criterion.  This
+        handles the common case where Nominatim returns a slightly different centroid for
+        the same city on different calls, shifting the bbox by a few km and causing a
+        spurious cache miss (e.g. Los Angeles centroid drifting between Streamlit restarts).
+        """
+        import re
+        from shapely.geometry import box as _box
+        req_area = requested_poly.area
+        if req_area == 0:
+            return None
+        pattern = re.compile(
+            r"pois_n([\d.]+)_s([\d.]+)_e(-?[\d.]+)_w(-?[\d.]+)\.(json\.gz|json)$"
+        )
+        for fname in os.listdir(self._cache_dir):
+            if fname == _MASTER_FILE:
+                continue
+            m = pattern.match(fname)
+            if not m:
+                continue
+            fn, fs, fe, fw = float(m.group(1)), float(m.group(2)), float(m.group(3)), float(m.group(4))
+            cached_poly = _box(fw, fs, fe, fn)
+            try:
+                intersection_area = requested_poly.intersection(cached_poly).area
+                overlap_frac = intersection_area / min(req_area, cached_poly.area)
+            except Exception:
+                continue
+            if overlap_frac >= 0.90:
+                return os.path.join(self._cache_dir, fname)
+        return None
 
     # ------------------------------------------------------------------
 

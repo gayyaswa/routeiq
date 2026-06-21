@@ -326,8 +326,32 @@ def _load_day_trip_resources():
     return kg, graph
 
 
-def _expand_kg_for_city(kg, city: str) -> None:
-    """Geocode city and fetch POIs from Overpass into the KG. Best-effort — silent on failure."""
+def _normalize_city_name(city: str) -> str:
+    """Fix run-together city names: 'NewYork, NY' → 'New York, NY'.
+
+    Inserts a space before any uppercase letter that immediately follows a
+    lowercase letter in the city part (before the comma).  State/country
+    suffixes after the comma are preserved unchanged.
+    """
+    import re
+    parts = city.split(",", 1)
+    fixed = re.sub(r"([a-z])([A-Z])", r"\1 \2", parts[0].strip())
+    return f"{fixed},{parts[1]}" if len(parts) > 1 else fixed
+
+
+def _expand_kg_for_city(kg, city: str) -> int:
+    """Geocode city and fetch POIs from Overpass into the KG.
+
+    Returns the number of POIs added (0 on any failure or empty result).
+    Only registers the city in the KG when at least one POI is found — a city
+    node with 0 POIs would be treated as "known" on the next call and silently
+    skip the pre-flight, permanently hiding the failure.
+
+    Applies light name normalisation (camelCase fix) before geocoding so that
+    inputs like 'NewYork, NY' resolve correctly without requiring an exact spelling.
+    """
+    import re
+    city = _normalize_city_name(city)
     try:
         import osmnx as ox
         from shapely.geometry import Point
@@ -335,8 +359,9 @@ def _expand_kg_for_city(kg, city: str) -> None:
         city_poly = gdf.geometry.iloc[0]  # actual administrative boundary polygon
         lat = float(gdf.geometry.centroid.y.iloc[0])
         lon = float(gdf.geometry.centroid.x.iloc[0])
-    except Exception:
-        return
+    except Exception as exc:
+        _logger.warning("_expand_kg_for_city: geocode failed for %r: %s", city, exc)
+        return 0
 
     from routeiq.graph.poi_finder import POIFinder, OverpassUnavailableError
     pad = 0.15
@@ -351,13 +376,18 @@ def _expand_kg_for_city(kg, city: str) -> None:
             "**Refine** box (e.g. *Add Griffith Observatory*).",
             icon=None,
         )
-        return
+        return 0
     # Keep only POIs inside the city's administrative boundary — the bbox above
     # is a coarse pre-filter for Overpass; the polygon clip prevents out-of-city
     # attractions (e.g. Marin County POIs for a SF query) from entering the KG.
     pois = [p for p in pois if city_poly.contains(Point(p.lon, p.lat))]
+    if not pois:
+        _logger.warning("_expand_kg_for_city: 0 POIs found for %r (lat=%.4f lon=%.4f) — city not registered", city, lat, lon)
+        return 0
     city_short = city.split(",")[0].strip()
     kg.add_city_pois(city_short, lat, lon, pois)
+    _logger.info("_expand_kg_for_city: added %d POIs for %r", len(pois), city)
+    return len(pois)
 
 
 def _render_dt_map(stops: list, route_coords: list, height: int = 340):
@@ -495,16 +525,30 @@ with tab1:
 
     # ── Inputs ────────────────────────────────────────────────────────────────
 
+    _OTHER_CITY = "Other city (type below)…"
+    _KNOWN_CITY_OPTIONS = _DEMO_CITIES_FAST + _DEMO_CITIES_SLOW + [_OTHER_CITY]
+
     dt_col1, dt_col2, dt_col3, dt_col4 = st.columns([3, 2, 1, 1])
     with dt_col1:
-        dt_city = st.text_input(
-            "City", value="San Francisco, CA",
-            placeholder="San Francisco, CA", key="dt_city_input"
+        dt_city_sel = st.selectbox(
+            "City",
+            options=_KNOWN_CITY_OPTIONS,
+            index=0,
+            key="dt_city_sel",
         )
-        st.caption(
-            "⚡ **Instant:** " + " · ".join(_DEMO_CITIES_FAST) + "  \n"
-            "🌐 **First use ~30 s:** " + " · ".join(_DEMO_CITIES_SLOW)
-        )
+        if dt_city_sel == _OTHER_CITY:
+            dt_city = st.text_input(
+                "City name",
+                placeholder="e.g. Boston, MA or Tokyo, Japan",
+                key="dt_city_custom",
+            )
+            st.caption("Any city worldwide — spelling is auto-corrected. First use ~30 s.")
+        else:
+            dt_city = dt_city_sel
+            if dt_city_sel in _DEMO_CITIES_FAST:
+                st.caption("⚡ Instant — pre-loaded")
+            else:
+                st.caption("🌐 First use ~30 s — fetches from OpenStreetMap")
     with dt_col2:
         dt_prefs = st.multiselect(
             "Interests", options=["nature", "history", "food", "art", "architecture"],
@@ -522,21 +566,37 @@ with tab1:
     dt_phase = st.session_state.get("dt_phase", "idle")
     dt_thread_id = st.session_state.setdefault("dt_thread_id", str(uuid.uuid4()))
 
+    _city_missing = dt_city_sel == _OTHER_CITY and not dt_city.strip()
     plan_btn = st.button(
         "Plan My Day ›", type="primary",
-        disabled=dt_phase in ("planning", "narrating"),
+        disabled=dt_phase in ("planning", "narrating") or _city_missing,
         key="dt_plan_btn",
     )
+    if _city_missing:
+        st.caption("Enter a city name above to enable planning.")
 
     if plan_btn and dt_city.strip() and dt_phase not in ("planning", "narrating"):
         kg, dt_graph = _load_day_trip_resources()
 
-        # Pre-flight KG check — expand for unknown cities
+        # Pre-flight KG check — normalize name, expand KG for unknown cities
+        dt_city_norm = _normalize_city_name(dt_city)
         known = kg.known_cities()
-        city_short = dt_city.split(",")[0].strip()
+        city_short = dt_city_norm.split(",")[0].strip()
         if city_short not in known:
-            with st.spinner(f"Fetching POIs for {dt_city}…"):
-                _expand_kg_for_city(kg, dt_city)
+            spinner_label = f"Fetching POIs for {dt_city_norm}…" + (
+                f" (corrected from '{dt_city}')" if dt_city_norm != dt_city else ""
+            )
+            with st.spinner(spinner_label):
+                poi_count = _expand_kg_for_city(kg, dt_city_norm)
+            if poi_count == 0:
+                st.error(
+                    f"Could not find any landmarks for **{dt_city_norm}**. "
+                    "Try a more specific city name (e.g. \"New York, NY, USA\") or check your spelling."
+                )
+                st.stop()
+
+        _logger.info("plan_btn clicked city=%r start_time=%r hours=%s prefs=%s phase_was=%s",
+                     dt_city, dt_start, dt_hours, dt_prefs, dt_phase)
 
         # Reset session for a fresh plan
         new_thread_id = str(uuid.uuid4())
@@ -559,7 +619,7 @@ with tab1:
         st.session_state["dt_progress_thread_id"] = new_thread_id
         initial_state = {
             "messages": [],
-            "city": dt_city,
+            "city": dt_city_norm,
             "preferences": dt_prefs,
             "time_budget_hours": float(dt_hours),
             "start_time": dt_start,
@@ -696,12 +756,12 @@ with tab1:
                     )
                     st.caption(
                         "💡 Try: &nbsp;"
-                        "**Add Lombard Street** · "
+                        "**Add Central Park** · "
                         "**Skip museums** · "
                         "**More nature spots** · "
-                        "**Start at 10 AM** · "
                         "**Fewer stops** · "
-                        "**Include the Ferry Building**"
+                        "**Include the High Line** &nbsp;·&nbsp; "
+                        "⚠️ To change start time, use the selector above and click **Plan My Day** again."
                     )
                     if st.button("🔄 Refine", key="dt_refine") and feedback_text.strip():
                         _, dt_graph = _load_day_trip_resources()

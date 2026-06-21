@@ -247,6 +247,30 @@ class TestScheduleStops:
             result_stops, _ = _schedule_stops(stops, "9:00 AM", 8.0, "San Francisco, CA")
         assert result_stops[0]["arrival_time"] == "9:00 AM"
 
+    def test_first_stop_gets_11am_start_time(self):
+        """Regression: 11:00 AM start should propagate to first stop, not silently fall back to 9 AM."""
+        stops = self._make_stops(2, visit_min=60)
+        fake_result = self._fake_route_result(drive_time_min=8.0)
+        with patch("osmnx.geocode", return_value=self._mock_geocode()), \
+             patch("routeiq.graph.graph_loader.GraphLoader") as mock_gl, \
+             patch("routeiq.graph.route_graph.RouteGraph") as mock_rg:
+            mock_gl.return_value.load.return_value = MagicMock()
+            mock_rg.return_value.find_route.return_value = fake_result
+            result_stops, _ = _schedule_stops(stops, "11:00 AM", 8.0, "San Francisco, CA")
+        assert result_stops[0]["arrival_time"] == "11:00 AM", (
+            f"Expected 11:00 AM but got {result_stops[0]['arrival_time']} — "
+            f"start_time may have fallen back to 9 AM default"
+        )
+
+    def test_timestr_to_minutes_all_selectbox_options(self):
+        """Every option in the Start time selectbox must parse to a non-zero minute value."""
+        options = ["8:00 AM", "9:00 AM", "10:00 AM", "11:00 AM"]
+        expected = [8 * 60, 9 * 60, 10 * 60, 11 * 60]
+        for opt, exp in zip(options, expected):
+            result = _timestr_to_minutes(opt)
+            assert result == exp, f"_timestr_to_minutes({opt!r}) returned {result}, expected {exp}"
+            assert result, f"_timestr_to_minutes({opt!r}) is falsy — will fall back to 9 AM default"
+
     def test_budget_drops_last_stop(self):
         # 3 stops × 30min visit + 15min transit (8 drive + 7 overhead).
         # Stop 3 departs at 11:00 AM; budget=1.5h ends at 10:30 AM → stop 3 trimmed → 2 remain.
@@ -279,6 +303,120 @@ class TestScheduleStops:
 
     def test_timestr_to_minutes_invalid(self):
         assert _timestr_to_minutes("not a time") is None
+
+
+class TestIterZeroGuard:
+    """Verify the iter==0 no-tool-call retry guard in _plan's ReAct loop."""
+
+    @pytest.fixture(autouse=True)
+    def _no_schedule(self, monkeypatch):
+        monkeypatch.setattr(
+            "routeiq.agent.day_trip_agent._schedule_stops",
+            lambda stops, *_: (stops, []),
+        )
+
+    def test_retries_once_when_first_call_has_no_tools(self):
+        """If the LLM returns no tool calls on iter=0, the guard nudges once and retries."""
+        mock = _mock_llm()
+        # First call → no tool_calls (triggers guard); second call → no tool_calls (exits loop)
+        no_tool_response = AIMessage(content="Here is my plan...", tool_calls=[])
+        mock.bind_tools.return_value.invoke.side_effect = [no_tool_response, no_tool_response]
+
+        graph = build_day_trip_graph()
+        config = {"configurable": {"thread_id": str(uuid.uuid4())}}
+
+        with patch("routeiq.agent.day_trip_agent.create_llm", return_value=mock):
+            for _ in graph.stream(_initial_state(), config=config):
+                pass
+
+        # Guard must have triggered: LLM invoked twice before exiting the ReAct loop
+        assert mock.bind_tools.return_value.invoke.call_count == 2
+
+    def test_no_retry_when_first_call_has_tools(self):
+        """If the LLM calls tools on iter=0, the guard does not fire and no extra call is made."""
+        from langchain_core.messages import ToolMessage
+
+        mock = _mock_llm()
+        tool_response = AIMessage(
+            content="",
+            tool_calls=[{"name": "find_city_pois", "args": {"city": "San Francisco, CA"}, "id": "tc1"}],
+        )
+        no_tool_response = AIMessage(content="Done.", tool_calls=[])
+
+        def _fake_invoke(messages):
+            call_n = mock.bind_tools.return_value.invoke.call_count
+            return tool_response if call_n == 0 else no_tool_response
+
+        mock.bind_tools.return_value.invoke.side_effect = _fake_invoke
+
+        with patch("routeiq.agent.day_trip_agent._execute_tool",
+                   return_value=ToolMessage(content="[]", tool_call_id="tc1", name="find_city_pois")):
+            graph = build_day_trip_graph()
+            config = {"configurable": {"thread_id": str(uuid.uuid4())}}
+
+            with patch("routeiq.agent.day_trip_agent.create_llm", return_value=mock):
+                for _ in graph.stream(_initial_state(), config=config):
+                    pass
+
+        # Tool was called once at iter=0, then once more at iter=1 (no tool calls → exit)
+        assert mock.bind_tools.return_value.invoke.call_count == 2
+
+
+class TestChicagoEndToEnd:
+    """End-to-end smoke test: agent must complete successfully with Chicago as the city."""
+
+    @pytest.fixture(autouse=True)
+    def _no_schedule(self, monkeypatch):
+        monkeypatch.setattr(
+            "routeiq.agent.day_trip_agent._schedule_stops",
+            lambda stops, *_: (stops, []),
+        )
+
+    def test_chicago_plan_reaches_review(self):
+        """Graph must pause at the review interrupt for a Chicago day trip (not error out)."""
+        chicago_state = {
+            "messages": [],
+            "city": "Chicago, IL",
+            "preferences": ["history", "architecture"],
+            "time_budget_hours": 8.0,
+            "start_time": "9:00 AM",
+            "draft_itinerary": None,
+            "route_coords": None,
+            "approved": False,
+            "narrative": None,
+        }
+        chicago_itinerary = DayTripItinerary(
+            city="Chicago, IL",
+            date="today",
+            total_hours=8.0,
+            stops=[
+                ItineraryStop(
+                    order=1,
+                    name="Art Institute of Chicago",
+                    category="museum",
+                    lat=41.8796,
+                    lon=-87.6237,
+                    arrival_time="TBD",
+                    departure_time="TBD",
+                    visit_duration_min=120,
+                    why_visit="World-class art museum in Grant Park.",
+                )
+            ],
+        )
+        mock = _mock_llm(chicago_itinerary)
+
+        graph = build_day_trip_graph()
+        config = {"configurable": {"thread_id": str(uuid.uuid4())}}
+
+        with patch("routeiq.agent.day_trip_agent.create_llm", return_value=mock):
+            for _ in graph.stream(chicago_state, config=config):
+                pass
+
+        snapshot = graph.get_state(config)
+        assert "review" in snapshot.next
+        draft = snapshot.values.get("draft_itinerary") or {}
+        assert draft.get("city") == "Chicago, IL"
+        assert len(draft.get("stops", [])) >= 1
 
 
 class TestItinerarySchema:
