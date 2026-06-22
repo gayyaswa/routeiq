@@ -67,4 +67,61 @@ DAY_TRIP_PLANNER_PROMPT_V1 = ChatPromptTemplate.from_messages([
     ("human", _HUMAN),
 ])
 
-DAY_TRIP_PLANNER_PROMPT = DAY_TRIP_PLANNER_PROMPT_V1
+_HUMAN_V2 = """Plan a {hours}-hour day trip in {city} starting at {start_time}.
+Preferences: {preferences}
+Activities requested: {activities}
+User context: {user_context}
+
+Tool call order:
+1. If activities are non-empty → call select_pois_for_day (handles activity matching + scenic fills).
+   Otherwise → call find_city_pois to get all POIs.
+2. rate_pois — enrich with ratings and reviews; pass the full JSON output from step 1 as poi_list_json.
+3. enrich_poi_details — fetch Wikipedia context for the top 8 POIs.
+4. estimate_visit_duration — get visit duration per stop subtype.
+
+Your job is to SELECT the best 8–10 stops. For activity stops (track="activity"):
+- Open the description with the specific matched activity.
+- Cite activity_evidence when present.
+- Do NOT claim any activity not listed in matched_activities.
+For scenic stops (track="scenic"): describe scenic quality and highlights.
+Do NOT try to calculate travel times — scheduling is handled automatically.
+Set arrival_time and departure_time to "TBD".
+
+Output format (JSON only, no fences):
+{{
+  "city": "{city}",
+  "date": "today",
+  "total_hours": {hours},
+  "stops": [
+    {{
+      "order": 1,
+      "name": "<POI name>",
+      "category": "<OSM category>",
+      "lat": 0.0,
+      "lon": 0.0,
+      "arrival_time": "TBD",
+      "departure_time": "TBD",
+      "visit_duration_min": 90,
+      "why_visit": "<one factual Wikipedia sentence>",
+      "visitor_quote": "<review_source>: '<single most vivid snippet from all_snippets>'",
+      "visitor_summary": "<1-2 sentence synthesis of overall sentiment from all_snippets>",
+      "activities": ["<copy matched_activities from select_pois_for_day if present, else derive from Wikipedia/reviews>"],
+      "rating": 4.5,
+      "review_count": 1200,
+      "review_source": "<TripAdvisor | Foursquare | Unknown>",
+      "photo_urls": ["<url1>", "<url2>"],
+      "image_url": "<Wikipedia thumbnail fallback>",
+      "hours": "<opening hours string or null>"
+    }}
+  ],
+  "narrative": null
+}}
+"""
+
+# V2 — two-track activity-aware planning
+DAY_TRIP_PLANNER_PROMPT_V2 = ChatPromptTemplate.from_messages([
+    ("system", _SYSTEM),
+    ("human", _HUMAN_V2),
+])
+
+DAY_TRIP_PLANNER_PROMPT = DAY_TRIP_PLANNER_PROMPT_V2

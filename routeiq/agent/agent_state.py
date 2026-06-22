@@ -16,3 +16,6 @@ class DayTripState(TypedDict):
     route_coords: Optional[List[tuple]]  # (lat, lon) pairs; None until _schedule_stops runs
     approved: bool
     narrative: Optional[str]
+    activities: List[str]               # ["hiking", "kids"] — from UI or query parser
+    user_context: str                   # "scenic coastal hiking" — adjective phrases
+    activity_fallback_note: Optional[str]  # set when a requested activity has no POIs

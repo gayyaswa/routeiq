@@ -45,4 +45,12 @@ class RatingsFactory:
             from routeiq.ratings.llm_synthetic import LLMSyntheticRatingProvider
             return LLMSyntheticRatingProvider()
 
+        if provider == "tavily_enrichment":
+            api_key = os.getenv("TAVILY_API_KEY", "")
+            if not api_key:
+                return _NullRatingProvider()
+            from routeiq.ratings.tavily_enrichment import TavilyEnrichmentProvider
+            from routeiq.llm_factory import create_llm
+            return TavilyEnrichmentProvider(api_key=api_key, llm=create_llm())
+
         return _NullRatingProvider()

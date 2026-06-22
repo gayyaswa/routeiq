@@ -17,6 +17,8 @@ class RatedPOI:
     review_source: str | None = None        # "TripAdvisor" | "Foursquare" | etc.
     hours: str | None = None
     photo_urls: list[str] | None = None     # up to 5 provider photos
+    matched_activities: list[str] | None = None   # carried from ActivityClassifier
+    activity_evidence: str | None = None           # grounded source: "Tavily: 'coastal trail'"
 
 
 class POIRatingProvider(ABC):

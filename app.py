@@ -529,6 +529,7 @@ with tab1:
     _KNOWN_CITY_OPTIONS = _DEMO_CITIES_FAST + _DEMO_CITIES_SLOW + [_OTHER_CITY]
 
     dt_col1, dt_col2, dt_col3, dt_col4 = st.columns([3, 2, 1, 1])
+    _act_col1, _act_col2 = st.columns([3, 4])
     with dt_col1:
         dt_city_sel = st.selectbox(
             "City",
@@ -561,6 +562,21 @@ with tab1:
             "Start time",
             options=["8:00 AM", "9:00 AM", "10:00 AM", "11:00 AM"],
             index=1, key="dt_start"
+        )
+
+    with _act_col1:
+        dt_activities = st.multiselect(
+            "Activities (optional)",
+            options=["hiking", "biking", "swimming", "kayaking", "kids", "picnic"],
+            default=[],
+            key="dt_activities",
+            help="Select activities to prioritize specific POI types.",
+        )
+    with _act_col2:
+        dt_user_context = st.text_input(
+            "Activity style (optional)",
+            placeholder="e.g. scenic coastal hiking, easy family trails",
+            key="dt_user_context",
         )
 
     dt_phase = st.session_state.get("dt_phase", "idle")
@@ -627,6 +643,9 @@ with tab1:
             "route_coords": None,
             "approved": False,
             "narrative": None,
+            "activities": list(dt_activities),
+            "user_context": dt_user_context.strip(),
+            "activity_fallback_note": None,
         }
         config = {"configurable": {"thread_id": new_thread_id}}
         thread = threading.Thread(

@@ -16,3 +16,4 @@ shapely
 pytest
 python-dotenv
 pyopenssl  # urllib3 v2 needs OpenSSL 1.1.1+; macOS system Python ships LibreSSL which breaks HTTPS reads
+tavily-python  # Week 4: activity classification + POI enrichment via web search

@@ -1,4 +1,5 @@
 from __future__ import annotations
+import json
 import logging
 import threading
 import time
@@ -28,6 +29,7 @@ _progress_registry: dict[str, dict] = {}
 # Maps agent tool names → logical stepper step keys
 _TOOL_TO_STEP: dict[str, str] = {
     "find_city_pois": "find_pois",
+    "select_pois_for_day": "find_pois",
     "enrich_poi_details": "find_pois",
     "get_travel_time": "find_pois",
     "estimate_visit_duration": "find_pois",
@@ -324,12 +326,17 @@ def _plan(state: DayTripState, config: Optional[RunnableConfig] = None) -> dict:
 
     # First pass: build messages from prompt template.
     # Re-plan pass: messages already contain conversation history + feedback HumanMessage.
+    activities = state.get("activities") or []
+    user_context = state.get("user_context") or ""
+
     if not state["messages"]:
         messages = DAY_TRIP_PLANNER_PROMPT.format_messages(
             city=state["city"],
             preferences=", ".join(state["preferences"]) or "any",
             hours=state["time_budget_hours"],
             start_time=state["start_time"],
+            activities=", ".join(activities) if activities else "none",
+            user_context=user_context or "none",
         )
     else:
         messages = list(state["messages"])
@@ -382,6 +389,26 @@ def _plan(state: DayTripState, config: Optional[RunnableConfig] = None) -> dict:
         for tc in response.tool_calls:
             messages.append(_execute_tool(tc))
 
+    # Compute activity fallback note: which requested activities had no matching POIs?
+    activity_fallback_note: str = ""
+    if activities:
+        covered: set[str] = set()
+        for msg in messages:
+            if isinstance(msg, ToolMessage) and msg.name == "select_pois_for_day":
+                try:
+                    stops_data = json.loads(msg.content)
+                    for s in (stops_data if isinstance(stops_data, list) else []):
+                        covered.update(s.get("matched_activities") or [])
+                except Exception:
+                    pass
+        uncovered = set(activities) - covered
+        if uncovered:
+            activity_fallback_note = (
+                f"Heads up: we couldn't find {', '.join(sorted(uncovered))} spots in {state['city']}. "
+                f"We've used the best scenic alternatives for those slots."
+            )
+            logger.info("_plan activity_fallback: uncovered=%s", uncovered)
+
     # Phase 2 — Structured extraction: build a FRESH prompt from tool results only.
     # Sending the full conversation (with the "Output JSON only" system instruction)
     # conflicts with with_structured_output's tool-calling mode on Nebius, causing
@@ -413,13 +440,17 @@ def _plan(state: DayTripState, config: Optional[RunnableConfig] = None) -> dict:
         f"and exclude any stop types the user wants removed.\n"
     ) if refinement_feedback else ""
 
+    fallback_note_str = (
+        f"\nActivity note: {activity_fallback_note}\n" if activity_fallback_note else ""
+    )
     extraction_messages = [
         HumanMessage(content=(
             f"Extract a structured day trip itinerary from these tool results.\n\n"
             f"Trip: {state['time_budget_hours']}-hour day in {state['city']} "
             f"starting at {state['start_time']}. "
             f"Preferences: {', '.join(state['preferences']) or 'any'}."
-            f"{refinement_note}\n\n"
+            f"{refinement_note}"
+            f"{fallback_note_str}\n\n"
             f"=== TOOL RESULTS ===\n{tool_context}\n=== END TOOL RESULTS ===\n\n"
             f"Rules:\n"
             f"- Include 8-10 stops matching the preferences.\n"
@@ -466,7 +497,12 @@ def _plan(state: DayTripState, config: Optional[RunnableConfig] = None) -> dict:
     itinerary_dict["stops"] = scheduled_stops
 
     logger.debug("_plan done in %.1fs — %d stops", time.perf_counter() - t0, len(scheduled_stops))
-    return {"messages": messages, "draft_itinerary": itinerary_dict, "route_coords": route_coords}
+    return {
+        "messages": messages,
+        "draft_itinerary": itinerary_dict,
+        "route_coords": route_coords,
+        "activity_fallback_note": activity_fallback_note or None,
+    }
 
 
 def _review(state: DayTripState) -> Command:
@@ -491,9 +527,23 @@ def _narrate(state: DayTripState) -> dict:
     llm = create_llm()
     stops = (state["draft_itinerary"] or {}).get("stops", [])
     stop_names = [s["name"] for s in stops]
+    activities = state.get("activities") or []
+    fallback_note = state.get("activity_fallback_note") or ""
+
+    activity_instruction = ""
+    if activities:
+        activity_stops = [s["name"] for s in stops if s.get("activities")]
+        if activity_stops:
+            activity_instruction = (
+                f" Weave in that this trip was tailored around {', '.join(activities)} — "
+                f"highlight {', '.join(activity_stops[:2])} as the activity-matched stops."
+            )
+    fallback_instruction = f" Note: {fallback_note}" if fallback_note else ""
+
     prompt = (
         f"Write a warm, engaging 3–4 sentence narrative introducing this day trip to "
-        f"{state['city']}. The approved stops for today are: {', '.join(stop_names)}. "
+        f"{state['city']}. The approved stops for today are: {', '.join(stop_names)}."
+        f"{activity_instruction}{fallback_instruction} "
         "Mention only stops from this list — do not mention any other places. "
         "Do not use bullet points or markdown headers."
     )

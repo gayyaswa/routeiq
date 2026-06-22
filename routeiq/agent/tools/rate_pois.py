@@ -39,7 +39,8 @@ def rate_pois(city: str, poi_list_json: str) -> str:
         Sorted best-first.
     """
     raw = json.loads(poi_list_json)
-    pois = [POI(**d) for d in raw]
+    _poi_fields = {f.name for f in dataclasses.fields(POI)}
+    pois = [POI(**{k: v for k, v in d.items() if k in _poi_fields}) for d in raw]
 
     rated = RatingsFactory.create().enrich_batch(city, pois)
 
