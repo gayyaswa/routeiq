@@ -368,10 +368,20 @@ def _plan(state: DayTripState, config: Optional[RunnableConfig] = None) -> dict:
                     len(response.content or ""),
                 )
                 messages.pop()  # discard the tool-free response
-                messages.append(HumanMessage(
-                    content="You must call find_city_pois first to discover POIs for this city. "
-                            "Please call the tools now — do not describe the plan, just call the tools."
-                ))
+                if activities:
+                    nudge = (
+                        f"You must call select_pois_for_day with "
+                        f"requested_activities={activities!r} to discover activity-matched POIs "
+                        f"for this city. Do not call find_city_pois — select_pois_for_day handles "
+                        f"both activity matching and scenic fills. "
+                        f"Please call the tools now — do not describe the plan, just call the tools."
+                    )
+                else:
+                    nudge = (
+                        "You must call find_city_pois first to discover POIs for this city. "
+                        "Please call the tools now — do not describe the plan, just call the tools."
+                    )
+                messages.append(HumanMessage(content=nudge))
                 continue
             logger.info("ReAct loop iter=%d no tool calls → stopping (response_len=%d)",
                         iteration, len(response.content or ""))
@@ -454,9 +464,11 @@ def _plan(state: DayTripState, config: Optional[RunnableConfig] = None) -> dict:
             f"=== TOOL RESULTS ===\n{tool_context}\n=== END TOOL RESULTS ===\n\n"
             f"Rules:\n"
             f"- Include 8-10 stops matching the preferences.\n"
-            f"- visitor_quote: the single most vivid snippet from all_snippets, "
-            f"prefixed with the review_source name.\n"
-            f"- visitor_summary: 1-2 sentences synthesising overall sentiment from all_snippets.\n"
+            f"- visitor_quote: the single most vivid snippet from all_snippets verbatim, "
+            f"prefixed with the review_source name (e.g. 'TripAdvisor: ...'). "
+            f"Set to null if all_snippets is empty or missing — do NOT fabricate quotes.\n"
+            f"- visitor_summary: 1-2 sentences synthesising overall visitor sentiment from all_snippets. "
+            f"Set to null if all_snippets is empty or missing — do NOT fabricate sentiment.\n"
             f"- why_visit: one factual sentence from the Wikipedia description only.\n"
             f"- activities: derived from Wikipedia and review snippets only.\n"
             f"- Copy lat, lon, photo_urls, rating, review_count, review_source, and hours "

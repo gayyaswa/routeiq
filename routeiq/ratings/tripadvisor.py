@@ -14,12 +14,13 @@ from routeiq.ratings.base import POIRatingProvider, RatedPOI
 
 _CACHE_DIR = "./cache/ratings"
 _CACHE_TTL_SECONDS = 21 * 86400          # 21 days — instructors never hit live API
-_API_BASE = "https://api.content.tripadvisor.com/api/v1"
+_API_BASE = "https://terra.tripadvisor.com/api"
 _SIMILARITY_THRESHOLD = 0.6              # ChromaDB L2 distance; lower = closer match
 _PROXIMITY_KM = 0.1                      # 100 m — geographic fallback when names diverge
 _MAX_REVIEWS = 3
 _MIN_REVIEW_CHARS = 80                   # filter one-liners before passing to LLM
 _MAX_PHOTOS = 5
+_MAX_RADIUS_KM = 8                       # Terra API hard limit
 
 
 def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -32,12 +33,16 @@ def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 
 class TripAdvisorRatingProvider(POIRatingProvider):
-    """Enriches OSM POIs with TripAdvisor ratings, reviews, and photos via Content API (Strategy pattern)."""
+    """Enriches OSM POIs with TripAdvisor ratings, reviews, and photos via Terra API (Strategy pattern)."""
 
     def __init__(self, api_key: str, cache_dir: str = _CACHE_DIR):
         self._api_key = api_key
         self._cache_dir = cache_dir
         os.makedirs(cache_dir, exist_ok=True)
+
+    @property
+    def _headers(self) -> dict[str, str]:
+        return {"X-API-KEY": self._api_key, "Accept": "application/json"}
 
     @property
     def source_name(self) -> str:
@@ -46,48 +51,70 @@ class TripAdvisorRatingProvider(POIRatingProvider):
     def enrich_batch(self, city: str, pois: list[POI]) -> list[RatedPOI]:
         if not pois:
             return []
+        return [self._enrich_poi(poi) for poi in pois]
 
-        centroid_lat = sum(p.lat for p in pois) / len(pois)
-        centroid_lon = sum(p.lon for p in pois) / len(pois)
+    # ── Per-POI fetch ─────────────────────────────────────────────────────────
 
-        pool = self._fetch_nearby(city, centroid_lat, centroid_lon)
+    def _enrich_poi(self, poi: POI) -> RatedPOI:
+        """Search TripAdvisor near the POI's own coordinates and return enriched result."""
+        pool = self._fetch_nearby_poi(poi)
         if not pool:
-            return [RatedPOI(poi=p, review_source=self.source_name) for p in pois]
-
+            return RatedPOI(poi=poi, review_source=self.source_name)
         collection = self._build_index(pool)
-        return [self._make_rated(poi, pool, collection) for poi in pois]
+        return self._make_rated(poi, pool, collection)
 
-    # ── Pool fetch ────────────────────────────────────────────────────────────
-
-    def _fetch_nearby(self, city: str, lat: float, lon: float) -> list[dict[str, Any]]:
-        cache_path = self._pool_cache_path(city)
+    def _fetch_nearby_poi(self, poi: POI) -> list[dict[str, Any]]:
+        """Fetch and cache the TripAdvisor nearby pool for a single POI."""
+        cache_path = self._poi_cache_path(poi)
         cutoff = time.time() - _CACHE_TTL_SECONDS
 
         if os.path.exists(cache_path) and os.path.getmtime(cache_path) > cutoff:
             with open(cache_path) as f:
                 return json.load(f)
 
-        data = self._call_nearby(lat, lon)
+        data = self._call_nearby(poi.lat, poi.lon)
         with open(cache_path, "w") as f:
             json.dump(data, f)
         return data
 
     def _call_nearby(self, lat: float, lon: float) -> list[dict[str, Any]]:
         params = {
-            "key": self._api_key,
-            "latLong": f"{lat},{lon}",
-            "category": "attractions",
-            "radius": 15,
-            "radiusUnit": "km",
-            "language": "en",
+            "lat": lat,
+            "lon": lon,
+            "radius": 1,
+            "unit": "KM",
+            "category": "ATTRACTION",
+            "size": 20,
         }
         try:
-            resp = requests.get(f"{_API_BASE}/location/nearby_search", params=params, timeout=15)
+            resp = requests.get(
+                f"{_API_BASE}/locations/nearby",
+                headers=self._headers,
+                params=params,
+                timeout=15,
+            )
             resp.raise_for_status()
-            return resp.json().get("data", [])
+            items = resp.json().get("data", [])
+            return [self._normalize_location(item["location"])
+                    for item in items if "location" in item]
         except Exception as exc:
             print(f"[tripadvisor] nearby_search error: {exc}", flush=True)
             return []
+
+    def _normalize_location(self, loc: dict[str, Any]) -> dict[str, Any]:
+        """Flatten Terra API location object to the same shape the rest of the pipeline expects."""
+        name = next((n["value"] for n in loc.get("names", []) if n.get("primary")), "")
+        coords = loc.get("coordinates") or {}
+        overall = (loc.get("traveler_ratings") or {}).get("overall") or {}
+        return {
+            "location_id": str(loc.get("id", "")),
+            "name": name,
+            # Terra returns floats; Content API returned strings — keep as strings for _find_match compat
+            "latitude": str(coords.get("latitude", "")),
+            "longitude": str(coords.get("longitude", "")),
+            "rating": overall.get("rating"),
+            "num_reviews": overall.get("count"),
+        }
 
     # ── Reviews ───────────────────────────────────────────────────────────────
 
@@ -105,16 +132,26 @@ class TripAdvisorRatingProvider(POIRatingProvider):
         return snippets
 
     def _call_reviews(self, location_id: str) -> list[str]:
-        # sort=HELPFUL returns most-upvoted reviews first — most substantive for LLM context
-        params = {"key": self._api_key, "language": "en", "sort": "HELPFUL", "limit": 10}
+        params = {"language": "en", "size": 10}
         try:
-            resp = requests.get(f"{_API_BASE}/location/{location_id}/reviews",
-                                params=params, timeout=15)
+            resp = requests.get(
+                f"{_API_BASE}/locations/{location_id}/reviews",
+                headers=self._headers,
+                params=params,
+                timeout=15,
+            )
             resp.raise_for_status()
             data = resp.json().get("data", [])
-            # Filter one-liners before taking top 3
-            return [r["text"] for r in data
-                    if r.get("text") and len(r["text"]) >= _MIN_REVIEW_CHARS][:_MAX_REVIEWS]
+            snippets = []
+            for review in data:
+                text_list = review.get("text") or []
+                # text is a list of {language, value, primary} objects
+                text = next((t["value"] for t in text_list if t.get("primary")), None)
+                if not text and text_list:
+                    text = text_list[0].get("value")
+                if text and len(text) >= _MIN_REVIEW_CHARS:
+                    snippets.append(text)
+            return snippets[:_MAX_REVIEWS]
         except Exception as exc:
             print(f"[tripadvisor] reviews error for {location_id}: {exc}", flush=True)
             return []
@@ -135,20 +172,22 @@ class TripAdvisorRatingProvider(POIRatingProvider):
         return urls
 
     def _call_photos(self, location_id: str) -> list[str]:
-        params = {"key": self._api_key, "language": "en"}
+        params = {"size": _MAX_PHOTOS}
         try:
-            resp = requests.get(f"{_API_BASE}/location/{location_id}/photos",
-                                params=params, timeout=15)
+            resp = requests.get(
+                f"{_API_BASE}/locations/{location_id}/photos",
+                headers=self._headers,
+                params=params,
+                timeout=15,
+            )
             resp.raise_for_status()
             data = resp.json().get("data", [])
             urls = []
-            for photo in data[:_MAX_PHOTOS]:
-                images = photo.get("images") or {}
-                # large → medium → small fallback
-                url = (images.get("large") or images.get("medium") or images.get("small") or {}).get("url")
+            for photo in data:
+                url = (photo.get("photo") or {}).get("original_size_url")
                 if url:
                     urls.append(url)
-            return urls
+            return urls[:_MAX_PHOTOS]
         except Exception as exc:
             print(f"[tripadvisor] photos error for {location_id}: {exc}", flush=True)
             return []
@@ -172,7 +211,6 @@ class TripAdvisorRatingProvider(POIRatingProvider):
             return pool[int(ids[0])]
 
         # Proximity fallback: embedding similarity failed (name divergence), use geography.
-        # TripAdvisor returns lat/lon as string fields — must cast to float.
         best_km = float("inf")
         best: dict[str, Any] | None = None
         for item in pool:
@@ -223,6 +261,6 @@ class TripAdvisorRatingProvider(POIRatingProvider):
 
     # ── Cache path helpers ────────────────────────────────────────────────────
 
-    def _pool_cache_path(self, city: str) -> str:
-        safe_city = city.replace(" ", "_").replace(",", "").lower()
-        return os.path.join(self._cache_dir, f"tripadvisor_{safe_city}_pool.json")
+    def _poi_cache_path(self, poi: POI) -> str:
+        safe_id = poi.osm_id.replace("/", "_").replace(" ", "_")
+        return os.path.join(self._cache_dir, f"tripadvisor_poi_{safe_id}.json")

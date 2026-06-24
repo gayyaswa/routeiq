@@ -1,4 +1,4 @@
-"""Tests for TripAdvisorRatingProvider."""
+"""Tests for TripAdvisorRatingProvider — Terra API."""
 import json
 import os
 import time
@@ -27,35 +27,53 @@ _POI_COIT = POI(
     osm_id="way/456",
 )
 
+# Normalized pool item — what gets cached after _normalize_location() runs
 _POOL_ITEM = {
     "location_id": "321",
     "name": "Alcatraz Island",
     "latitude": "37.8267",
     "longitude": "-122.4233",
-    "rating": "4.5",
-    "num_reviews": "5000",
+    "rating": 4.5,
+    "num_reviews": 5000,
 }
 
+# Terra API nearby response shape (wraps location inside "location" key)
+_TERRA_NEARBY_ITEM = {
+    "location": {
+        "id": 321,
+        "names": [{"language": "en", "value": "Alcatraz Island", "primary": True}],
+        "coordinates": {"latitude": 37.8267, "longitude": -122.4233},
+        "traveler_ratings": {
+            "overall": {"rating": 4.5, "count": 5000},
+            "breakdowns": [],
+        },
+    },
+    "distance_kilometers": 0.5,
+    "bearing": 180.0,
+}
+
+# Terra API review shape: text is a list of localized objects
 _REVIEWS_DATA = [
-    {"text": "Amazing experience! The history is absolutely mind-blowing and the bay views are simply spectacular."},
-    {"text": "A must-visit destination! The audio tour is excellent and very informative for visitors of all ages."},
-    {"text": "One of the finest historic sites I have ever visited in all my travels. Book tickets well ahead!"},
-    {"text": "Ok."},                # 3 chars — filtered by _MIN_REVIEW_CHARS (< 80)
+    {"text": [{"language": "en", "value": "Amazing experience! The history is absolutely mind-blowing and the bay views are simply spectacular.", "primary": True}]},
+    {"text": [{"language": "en", "value": "A must-visit destination! The audio tour is excellent and very informative for visitors of all ages.", "primary": True}]},
+    {"text": [{"language": "en", "value": "One of the finest historic sites I have ever visited in all my travels. Book tickets well ahead!", "primary": True}]},
+    {"text": [{"language": "en", "value": "Ok.", "primary": True}]},  # 3 chars — filtered by _MIN_REVIEW_CHARS
 ]
 
+# Terra API photo shape: photo.original_size_url (no large/medium/small nesting)
 _PHOTOS_DATA = [
-    {"images": {"large": {"url": "https://example.com/photo1.jpg"}, "medium": {"url": "https://example.com/photo1m.jpg"}}},
-    {"images": {"large": {"url": "https://example.com/photo2.jpg"}}},
-    {"images": {"medium": {"url": "https://example.com/photo3m.jpg"}}},  # no large → medium fallback
-    {"images": {"large": {"url": "https://example.com/photo4.jpg"}}},
-    {"images": {"large": {"url": "https://example.com/photo5.jpg"}}},
+    {"photo": {"original_size_url": "https://example.com/photo1.jpg"}},
+    {"photo": {"original_size_url": "https://example.com/photo2.jpg"}},
+    {"photo": {"original_size_url": "https://example.com/photo3.jpg"}},
+    {"photo": {"original_size_url": "https://example.com/photo4.jpg"}},
+    {"photo": {"original_size_url": "https://example.com/photo5.jpg"}},
 ]
 
 
-def _nearby_resp(data):
+def _nearby_resp(terra_items):
     m = MagicMock()
     m.raise_for_status = MagicMock()
-    m.json.return_value = {"data": data}
+    m.json.return_value = {"data": terra_items}
     return m
 
 
@@ -78,14 +96,14 @@ def provider(tmp_path):
     return TripAdvisorRatingProvider(api_key="test-key", cache_dir=str(tmp_path))
 
 
-def _setup_all_calls(nearby_data=None):
-    """Return a side_effect list: nearby → reviews → photos."""
-    if nearby_data is None:
-        nearby_data = [_POOL_ITEM]
+def _setup_all_calls(terra_items=None):
+    """Return a side_effect routing nearby → reviews → photos by Terra API URL patterns."""
+    if terra_items is None:
+        terra_items = [_TERRA_NEARBY_ITEM]
 
     def side_effect(url, **kwargs):
-        if "nearby_search" in url:
-            return _nearby_resp(nearby_data)
+        if "locations/nearby" in url:
+            return _nearby_resp(terra_items)
         if "/reviews" in url:
             return _reviews_resp()
         if "/photos" in url:
@@ -95,37 +113,42 @@ def _setup_all_calls(nearby_data=None):
     return side_effect
 
 
+_POI_CACHE_FILE = "tripadvisor_poi_way_123.json"  # _POI_ALCATRAZ.osm_id = "way/123"
+
+
 class TestPoolCache:
     def test_cache_miss_calls_api_and_writes_file(self, provider, tmp_path):
         with patch("requests.get", side_effect=_setup_all_calls()):
             provider.enrich_batch(_CITY, [_POI_ALCATRAZ])
 
-        pool_file = tmp_path / f"tripadvisor_{_SAFE_CITY}_pool.json"
-        assert pool_file.exists()
-        assert json.loads(pool_file.read_text()) == [_POOL_ITEM]
+        poi_file = tmp_path / _POI_CACHE_FILE
+        assert poi_file.exists()
+        # Cache stores normalized items (not raw Terra API items)
+        cached = json.loads(poi_file.read_text())
+        assert cached == [_POOL_ITEM]
 
     def test_cache_hit_skips_nearby_api(self, provider, tmp_path):
-        # Pre-seed pool cache
-        pool_file = tmp_path / f"tripadvisor_{_SAFE_CITY}_pool.json"
-        pool_file.write_text(json.dumps([_POOL_ITEM]))
+        # Pre-seed per-POI cache with normalized items
+        poi_file = tmp_path / _POI_CACHE_FILE
+        poi_file.write_text(json.dumps([_POOL_ITEM]))
 
         with patch("requests.get", side_effect=_setup_all_calls()) as mock_get:
             provider.enrich_batch(_CITY, [_POI_ALCATRAZ])
 
-        # nearby_search must NOT be called; reviews+photos may still be called
-        nearby_calls = [c for c in mock_get.call_args_list if "nearby_search" in c.args[0]]
+        # nearby must NOT be called; reviews+photos may still be called
+        nearby_calls = [c for c in mock_get.call_args_list if "locations/nearby" in c.args[0]]
         assert len(nearby_calls) == 0
 
     def test_stale_pool_cache_triggers_api(self, provider, tmp_path):
-        pool_file = tmp_path / f"tripadvisor_{_SAFE_CITY}_pool.json"
-        pool_file.write_text(json.dumps([_POOL_ITEM]))
+        poi_file = tmp_path / _POI_CACHE_FILE
+        poi_file.write_text(json.dumps([_POOL_ITEM]))
         old_mtime = time.time() - _CACHE_TTL_SECONDS - 1
-        os.utime(pool_file, (old_mtime, old_mtime))
+        os.utime(poi_file, (old_mtime, old_mtime))
 
         with patch("requests.get", side_effect=_setup_all_calls()) as mock_get:
             provider.enrich_batch(_CITY, [_POI_ALCATRAZ])
 
-        nearby_calls = [c for c in mock_get.call_args_list if "nearby_search" in c.args[0]]
+        nearby_calls = [c for c in mock_get.call_args_list if "locations/nearby" in c.args[0]]
         assert len(nearby_calls) == 1
 
 
@@ -158,13 +181,14 @@ class TestPhotosCache:
         photos_file = tmp_path / "tripadvisor_photos_321.json"
         assert photos_file.exists()
 
-    def test_photo_url_large_fallback_to_medium(self, provider, tmp_path):
-        # Photo 3 has no large → should fall back to medium
+    def test_photo_url_extracted_from_original_size_url(self, provider, tmp_path):
+        # Terra API: photo URL lives at photo.original_size_url (no large/medium nesting)
         with patch("requests.get", side_effect=_setup_all_calls()):
             rated = provider.enrich_batch(_CITY, [_POI_ALCATRAZ])
 
         urls = rated[0].photo_urls or []
-        assert "https://example.com/photo3m.jpg" in urls
+        assert len(urls) >= 1
+        assert all(u.startswith("https://") for u in urls)
 
 
 class TestRatingPassthrough:
@@ -176,8 +200,15 @@ class TestRatingPassthrough:
         assert rated[0].rating == pytest.approx(4.5)
 
     def test_missing_rating_is_none(self, provider):
-        no_rating = {**_POOL_ITEM, "rating": ""}
-        with patch("requests.get", side_effect=_setup_all_calls([no_rating])):
+        no_rating_item = {
+            "location": {
+                "id": 321,
+                "names": [{"language": "en", "value": "Alcatraz Island", "primary": True}],
+                "coordinates": {"latitude": 37.8267, "longitude": -122.4233},
+                "traveler_ratings": {"overall": None, "breakdowns": []},
+            },
+        }
+        with patch("requests.get", side_effect=_setup_all_calls([no_rating_item])):
             rated = provider.enrich_batch(_CITY, [_POI_ALCATRAZ])
 
         assert rated[0].rating is None
@@ -225,17 +256,29 @@ class TestNameMatchAndProximity:
 
     def test_proximity_fallback_within_100m(self, provider):
         # Name differs but coordinates match within 100 m
-        nearby = {**_POOL_ITEM, "name": "ZYXWVU_Totally_Different_Name",
-                  "latitude": "37.8267", "longitude": "-122.4233"}
-        with patch("requests.get", side_effect=_setup_all_calls([nearby])):
+        different_name_item = {
+            "location": {
+                "id": 321,
+                "names": [{"language": "en", "value": "ZYXWVU_Totally_Different_Name", "primary": True}],
+                "coordinates": {"latitude": 37.8267, "longitude": -122.4233},
+                "traveler_ratings": {"overall": {"rating": 4.5, "count": 5000}, "breakdowns": []},
+            },
+        }
+        with patch("requests.get", side_effect=_setup_all_calls([different_name_item])):
             rated = provider.enrich_batch(_CITY, [_POI_ALCATRAZ])
 
         assert rated[0].rating == pytest.approx(4.5)
 
     def test_no_match_returns_null_fields(self, provider):
-        far = {**_POOL_ITEM, "name": "ZYXWVU_Totally_Different",
-               "latitude": "34.0", "longitude": "-118.0"}   # Los Angeles
-        with patch("requests.get", side_effect=_setup_all_calls([far])):
+        far_item = {
+            "location": {
+                "id": 999,
+                "names": [{"language": "en", "value": "ZYXWVU_Totally_Different", "primary": True}],
+                "coordinates": {"latitude": 34.0, "longitude": -118.0},   # Los Angeles
+                "traveler_ratings": {"overall": {"rating": 4.5, "count": 5000}, "breakdowns": []},
+            },
+        }
+        with patch("requests.get", side_effect=_setup_all_calls([far_item])):
             rated = provider.enrich_batch(_CITY, [_POI_ALCATRAZ])
 
         assert rated[0].rating is None
