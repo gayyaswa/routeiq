@@ -1,4 +1,4 @@
-"""Seed data for the RouteIQ knowledge graph — Bay Area POIs, Cities, Regions, Categories."""
+"""Seed data for the RouteIQ knowledge graph — Bay Area + NYC POIs, Cities, Regions, Categories."""
 from __future__ import annotations
 
 import gzip
@@ -23,9 +23,17 @@ REGIONS = [
     {"name": "South Bay",         "type": "urban_region"},
     {"name": "Wine Country",      "type": "scenic_region"},
     {"name": "Bay Area",          "type": "metro_region"},
+    # NYC
+    {"name": "Manhattan",         "type": "city_region"},
+    {"name": "Brooklyn",          "type": "urban_region"},
+    {"name": "Queens",            "type": "urban_region"},
+    {"name": "Bronx",             "type": "urban_region"},
+    {"name": "Staten Island",     "type": "scenic_region"},
+    {"name": "New York City",     "type": "metro_region"},
 ]
 
 CITIES = [
+    # Bay Area
     {"name": "San Francisco", "lat": 37.7749, "lon": -122.4194},
     {"name": "Oakland",       "lat": 37.8044, "lon": -122.2712},
     {"name": "Berkeley",      "lat": 37.8716, "lon": -122.2727},
@@ -36,6 +44,12 @@ CITIES = [
     {"name": "Half Moon Bay", "lat": 37.4636, "lon": -122.4286},
     {"name": "Mill Valley",   "lat": 37.9060, "lon": -122.5450},
     {"name": "Tiburon",       "lat": 37.8910, "lon": -122.4569},
+    # NYC boroughs
+    {"name": "Manhattan",     "lat": 40.7831, "lon": -73.9712},
+    {"name": "Brooklyn",      "lat": 40.6782, "lon": -73.9442},
+    {"name": "Queens",        "lat": 40.7282, "lon": -73.7949},
+    {"name": "Bronx",         "lat": 40.8448, "lon": -73.8648},
+    {"name": "Staten Island", "lat": 40.5795, "lon": -74.1502},
 ]
 
 _CITY_REGIONS: dict[str, str] = {
@@ -51,10 +65,19 @@ _CITY_REGIONS: dict[str, str] = {
     "Napa":          "Wine Country",
 }
 
+_NYC_CITY_REGIONS: dict[str, str] = {
+    "Manhattan":     "Manhattan",
+    "Brooklyn":      "Brooklyn",
+    "Queens":        "Queens",
+    "Bronx":         "Bronx",
+    "Staten Island": "Staten Island",
+}
+
+_ALL_CITY_REGIONS: dict[str, str] = {**_CITY_REGIONS, **_NYC_CITY_REGIONS}
+
 _VALID_CATEGORIES = {c["name"] for c in CATEGORIES}
 
 # Anchor POIs — always present; used as fallback when master cache is missing.
-# osm_ids match values in cache/pois/bay_area_all.json.gz for dedup consistency.
 _ANCHOR_POIS: list[dict] = [
     {"osm_id": "('way', 370672707)",    "name": "Golden Gate Bridge",  "category": "tourism",  "lat": 37.8203, "lon": -122.4786},
     {"osm_id": "('relation', 5504536)", "name": "Fort Point",          "category": "historic", "lat": 37.8106, "lon": -122.4771},
@@ -97,7 +120,7 @@ def _load_bay_area_pois() -> list[dict]:
     seen: set[str] = set()
     pois: list[dict] = []
     for p in raw:
-        if not p.get("wikipedia_tag"):
+        if not p.get("name") or not p.get("category"):
             continue
         osm_id = p["osm_id"]
         if osm_id in seen:
@@ -108,6 +131,7 @@ def _load_bay_area_pois() -> list[dict]:
             "osm_id": osm_id,
             "name": p["name"],
             "category": p.get("category", "tourism"),
+            "subtype": p.get("subtype"),
             "lat": p["lat"],
             "lon": p["lon"],
             "city": city,
@@ -117,7 +141,44 @@ def _load_bay_area_pois() -> list[dict]:
     return pois
 
 
-POIS = _load_bay_area_pois()
+def _load_nyc_pois() -> list[dict]:
+    """Load NYC POIs from bbox cache files; gate on name + category."""
+    cache_dir = Path(__file__).parent.parent.parent / "cache" / "pois"
+    nyc_files = [
+        cache_dir / "pois_n40.813_s40.513_e-73.789_w-74.089.json.gz",
+        cache_dir / "pois_n40.818_s40.518_e-73.829_w-74.129.json.gz",
+    ]
+
+    seen: set[str] = set()
+    pois: list[dict] = []
+    for cache_file in nyc_files:
+        if not cache_file.exists():
+            continue
+        with gzip.open(cache_file) as f:
+            raw = json.load(f)
+        for p in raw:
+            if not p.get("name") or not p.get("category"):
+                continue
+            osm_id = p["osm_id"]
+            if osm_id in seen:
+                continue
+            seen.add(osm_id)
+            city = _nearest_city(p["lat"], p["lon"])
+            pois.append({
+                "osm_id": osm_id,
+                "name": p["name"],
+                "category": p.get("category", "tourism"),
+                "subtype": p.get("subtype"),
+                "lat": p["lat"],
+                "lon": p["lon"],
+                "city": city,
+                "region": _NYC_CITY_REGIONS.get(city, "New York City"),
+                "wikipedia_tag": p.get("wikipedia_tag"),
+            })
+    return pois
+
+
+POIS = _load_bay_area_pois() + _load_nyc_pois()
 
 RELATIONSHIPS = (
     [(p["osm_id"], "LOCATED_IN", p["city"]) for p in POIS]
@@ -125,6 +186,10 @@ RELATIONSHIPS = (
         (p["osm_id"], "HAS_CATEGORY", p["category"] if p["category"] in _VALID_CATEGORIES else "tourism")
         for p in POIS
     ]
-    + [(city["name"], "IN_REGION", _CITY_REGIONS.get(city["name"], "Bay Area")) for city in CITIES]
-    + [(city["name"], "IN_REGION", "Bay Area") for city in CITIES]
+    # Specific sub-region edge (e.g. Sausalito→North Bay/Marin; Manhattan→Manhattan)
+    + [(city["name"], "IN_REGION", _ALL_CITY_REGIONS.get(city["name"], "Bay Area")) for city in CITIES]
+    # Metro umbrella — Bay Area cities also point to "Bay Area"
+    + [(city["name"], "IN_REGION", "Bay Area") for city in CITIES if city["name"] in _CITY_REGIONS]
+    # NYC metro umbrella — boroughs also point to "New York City"
+    + [(city["name"], "IN_REGION", "New York City") for city in CITIES if city["name"] in _NYC_CITY_REGIONS]
 )

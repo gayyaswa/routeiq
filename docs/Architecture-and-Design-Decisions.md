@@ -136,3 +136,57 @@ Format: Decision → Why → Alternatives considered → Trade-offs accepted.
 | Neo4j | NetworkX sufficient for single-machine Week 1 |
 | Auth, saved routes | Week 2+ scope |
 | Cloud deployment | Week 2+ scope |
+
+---
+
+## Week 4 — Evaluation & Activity Layer
+
+### Two-track POI merge over single-ranked list
+
+**Decision:** `select_pois_for_day` uses a **two-track merge**: Track 1 = activity-matched slots (proportional to pool size), Track 2 = scenic fills for remaining slots.
+**Why:** A single ranked list sorted by activity match crowds out scenic diversity. A trip with `["hiking"]` and 30 hiking POIs should still include a museum or viewpoint. The two-track budget guarantees variety.
+**Trade-off accepted:** The proportional slot formula (1 slot for 1–4 matches, 2 for 5–10, 3+ for larger) was chosen by inspection — not learned from data. A reinforcement-learning approach could optimize this but is out of scope.
+
+![Slot scaling — proportional activity budget](./images/eval_slot_scaling.png)
+
+### OSM tag classifier as the default over Tavily
+
+**Decision:** `ACTIVITY_PROVIDER=osm` is the default. Tavily is opt-in via env var.
+**Why:** OSM tags (`peak`, `beach`, `playground`, `cycling_path`) map directly to activities with zero latency and zero API cost. Tavily adds lift for POIs with ambiguous tags (e.g., a "nature reserve" known for kayaking that has no explicit tag) but costs money per query and adds 5–20s to planning time.
+**Alternatives considered:** Tavily-only (better recall, higher cost), hybrid always-on (expensive, no marginal gain on well-tagged cities like SF).
+**Trade-off accepted:** OSM classifier misses activity-tagged POIs that lack OSM subtypes (e.g., a community pool without `leisure=swimming_pool`). Evaluated as acceptable given 44 SF hiking POIs discovered vs 0 before the fix.
+
+### Subtype passthrough in KG loader (Bug fix, not original design)
+
+**Decision:** KG loader now passes `"subtype": p.get("subtype")` from raw OSM data into `POI` objects.
+**Why this was a bug:** The original loader dropped `subtype`, so `OSMActivityClassifier._match()` always searched an empty string — 0 matches for every activity.
+
+![Subtype passthrough fix — before and after](./images/eval_subtype_fix.png)
+
+**Lesson:** Tracing data lineage from raw OSM → `POI` → `ClassifiedPOI` → `ToolMessage` was the only way to find this. The bug was invisible at the agent level because `select_pois_for_day` returned POIs (just none with `matched_activities`).
+
+### rate_pois returns visit_duration_min (Improvement 9)
+
+**Decision:** `rate_pois` now pre-populates `visit_duration_min` using the same `_VISIT_MINUTES` table as `estimate_visit_duration`. The V2 prompt bans calling `estimate_visit_duration` and `enrich_poi_details` separately.
+**Why:** The LLM was calling `estimate_visit_duration` 7× per run and `enrich_poi_details` 3×, both returning data already present in the `rate_pois` output. Each wasted iteration cost 1–8s of LLM inference. Total wasted per run: ~35s.
+**Result:** 12 iterations → 2–3; `total_react` from ~55s to ~37s.
+
+![ReAct loop iteration reduction — Improvement 9](./images/eval_react_loop_fix.png)
+
+### LLM-as-judge only for match quality, not routing or recall
+
+**Decision:** Code-based evaluators for tool routing and activity recall; LLM-as-judge only for `avg_match_quality` (1–5 score per matched stop).
+**Why:** Tool routing is binary — either `select_pois_for_day` was called first or it wasn't. Activity recall is keyword-based. Both are fully deterministic and fast. LLM-as-judge adds value where nuance matters: "Does this viewpoint really suit hiking?" can't be answered by keyword matching.
+**Trade-off accepted:** LLM-as-judge is skipped when no API key is present (`judge_llm=None`) — graceful degradation to code-only scoring.
+
+### 5-configuration eval matrix over A/B test
+
+**Decision:** Compare 5 configurations (2 classifiers × 3 rating providers, minus 1 duplicate) instead of a single A/B pair.
+**Why:** Three independent variables (activity classifier, rating provider, enrichment depth) interact. A single A/B test can attribute improvement to the wrong variable. The 5-run matrix isolates each variable: Runs 1→2 = classifier lift, Runs 1→4 = rating provider lift, Run 5 = combined best-of-all.
+**Trade-off accepted:** 150 agent calls (~5–8 hours) vs ~30 for a single A/B. Acceptable for a one-time evaluation; would add continuous eval monitoring in production.
+
+### Wikipedia write-race (known issue, deferred)
+
+**Decision:** Not fixing the `_write_cache` write race in `WikipediaFetcher` for Week 4.
+**Why:** The race only manifests with 6+ concurrent threads, and the impact is a shorter cache snapshot (11 entries instead of 22), not corrupt data. The cache rebuilds on subsequent runs. Fix is straightforward (`_cache_lock` around `_write_cache`) but adds complexity without changing eval outcomes.
+**Deferred until:** Production deployment, or if cache thrashing becomes measurable during eval.

@@ -67,16 +67,15 @@ class TestTrackMerge:
         assert all(c.matched_activities == [] for c in result)
 
     def test_no_activity_candidates_fills_scenic(self, selector):
-        # n_activity_slots = 1, n_scenic_slots = 1 (total 2 - 1 activity slot).
-        # Hiking has no candidates so Track1 = []. Track2 fills 1 slot.
-        # Unused activity slots are NOT reclaimed — this is intentional.
+        # Hiking has no candidates → _slots_for_activity([]) = 0 → no activity budget reserved.
+        # Unused budget spills to scenic fills so the user still gets a full itinerary.
         classified = [
             _cpoi("Museum", "1", subtype="museum"),
             _cpoi("Park", "2", subtype="viewpoint"),
         ]
         result = selector.select(classified, ["hiking"], total_stops=2)
-        assert len(result) == 1  # only the 1 scenic slot is filled
-        assert result[0].poi.osm_id in {"1", "2"}
+        assert len(result) == 2  # all slots filled as scenic (viewpoint > museum)
+        assert {c.poi.osm_id for c in result} == {"1", "2"}
 
     def test_total_stops_respected(self, selector):
         classified = [_cpoi(f"Spot{i}", str(i)) for i in range(10)]

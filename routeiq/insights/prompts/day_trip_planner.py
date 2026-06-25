@@ -76,8 +76,8 @@ Tool call order:
 1. If activities are non-empty → call select_pois_for_day (handles activity matching + scenic fills).
    Otherwise → call find_city_pois to get all POIs.
 2. rate_pois — enrich with ratings and reviews; pass the full JSON output from step 1 as poi_list_json.
-3. enrich_poi_details — fetch Wikipedia context for the top 8 POIs.
-4. estimate_visit_duration — get visit duration per stop subtype.
+   rate_pois already returns: description (Wikipedia text), image_url, and visit_duration_min.
+   Do NOT call enrich_poi_details or estimate_visit_duration — the data is already present.
 
 Your job is to SELECT the best 8–10 stops. For activity stops (track="activity"):
 - Open the description with the specific matched activity.

@@ -27,6 +27,7 @@ streamlit run app.py
 | `NEBIUS_API_BASE` | `https://api.tokenfactory.nebius.com/v1/` | Nebius OpenAI-compatible endpoint |
 | `ANTHROPIC_API_KEY` | — | Required when `LLM_PROVIDER=anthropic` |
 | `RATING_PROVIDER` | `llm_synthetic` | `llm_synthetic` · `tripadvisor` · `foursquare` |
+| `ACTIVITY_CLASSIFIER` | `osm` | `osm` · `tavily` — classifier used by `select_pois_for_day` |
 
 > **Bay Area cities load instantly** — road graphs, POI data, and rating caches for San Francisco, Oakland, Berkeley, San Jose, and Santa Cruz are bundled. Other cities trigger a one-time Overpass fetch (~15–30 s), then cache locally.
 
@@ -53,7 +54,7 @@ flowchart TD
         K["KG warm-up: known_cities()\nIf new → Overpass fetch → add_city_pois()"]
     end
     subgraph Agent ["LangGraph Agent (plan → review → narrate)"]
-        P["plan node — ReAct tool loop\n1. find_city_pois  (KG lookup)\n2. rate_pois  (quality ranking)\n3. enrich_poi_details  (Wikipedia)\n4. estimate_visit_duration\n5. search_poi_by_name  (on refine)\n→ structured extraction (Pydantic)\n→ _schedule_stops (A* road routing)"]
+        P["plan node — ReAct tool loop\n1. find_city_pois  (KG lookup)\n2. rate_pois  (quality ranking)\n3. enrich_poi_details  (Wikipedia)\n4. estimate_visit_duration\n5. search_poi_by_name  (on refine)\n6. select_pois_for_day  (activity match)\n→ structured extraction (Pydantic)\n→ _schedule_stops (A* road routing)"]
         H["interrupt_before review\n── Human reviews draft ──\nApprove · Refine · Re-plan"]
         N["narrate node\nGenerate trip narrative"]
     end
@@ -113,6 +114,42 @@ graph LR
 ### Week 2: GraphRAG vs. Vector Baseline (Route Planner)
 GraphRAG vs. vector-only comparison (10 queries) — see [docs/README-routeplanner.md](docs/README-routeplanner.md) for methodology and results.
 
+### Week 4: Activity-Based Day Trip Eval
+
+Evaluates the `select_pois_for_day` tool across 5 classifier × ratings configurations, 15 queries each (8 SF + 7 NYC).
+
+```bash
+python3 eval/run_week4_eval.py --limit 15
+```
+
+**Pass bars:** routing accuracy = 8/8 · recall ≥ 70% · p95 plan time < 90 s  
+Results saved to `eval/results_week4.md`. Requires `NEBIUS_API_KEY` (and optionally `TAVILY_API_KEY` for Tavily configs).
+
+**Results (15-query smoke test, all 5 configurations):**
+
+| Config | Pass Rate | Routing | Avg Recall | Avg Time |
+|--------|-----------|---------|------------|----------|
+| Run 1 OSM + LLM-Synth | 13/15 | **15/15** | 83% | 66.0 s |
+| Run 2 Tavily + LLM-Synth | **15/15** | **15/15** | **100%** | 70.3 s |
+| Run 3 Tavily + Enrich | 14/15 | **15/15** | 90% | 49.6 s |
+| Run 4 OSM + TripAdvisor | 13/15 | **15/15** | 83% | 41.9 s |
+| Run 5 Tavily + TripAdvisor | **15/15** | **15/15** | 97% | 43.8 s |
+
+**Key findings:**
+- Routing 15/15 (100%) across every configuration — all 9 improvements holding
+- Tavily classifier +17% recall lift vs OSM (83% → 100%): finds parks as picnic via web content even without `leisure=picnic_site` OSM tags
+- **Recommended config:** Run 5 (Tavily + TripAdvisor) — 15/15, 97% recall, 43.8 s, 38% real photos, avg rating 4.49
+- **No-API-key fallback:** Run 1 (OSM + LLM-Synth) — 13/15, 83% recall, fully offline
+
+**9 improvements implemented** across data pipeline, classifier, control flow, and prompt:
+- ReAct iterations: 12 → 2–3 (pre-populated `visit_duration_min`)
+- Plan time: ~226 s → ~30 s (warm caches, all fixes applied)
+- Picnic gap: 0% recall in OSM configs, 100% in Tavily configs
+
+Tool routing eval: 8/8 (100%) — see `eval/results_tool_routing.md`.
+
+---
+
 ### Week 3: Agent Eval (Day Trip Planner)
 End-to-end quality evaluation across 6 Bay Area queries.
 
@@ -169,12 +206,14 @@ PASS threshold: `stops >= floor(hours/2)` (scales with budget — agent trims st
 python3 -m pytest tests/ -v
 ```
 
-**213 tests across 22 test files.** Coverage includes:
+**315 tests across 24 test files.** Coverage includes:
 
 | Area | Test files |
 |---|---|
 | Day Trip Agent — scheduling, budget trimming, ReAct loop | `tests/agent/test_day_trip_agent.py` |
 | Agent tools — find POIs, rate, enrich, search by name | `tests/agent/test_tools.py` |
+| Activity classifier — OSM + Tavily, ranker, factory | `tests/test_activity_poi_selector.py` |
+| Tool routing eval — score_tool_routing() | `tests/test_tool_routing_eval.py` |
 | Ratings — TripAdvisor, Foursquare, LLM synthetic, factory | `tests/ratings/` (4 files) |
 | Graph loading + pickle cache | `test_graph_loader.py` |
 | A\* pathfinding | `test_route_graph.py` |
@@ -204,6 +243,8 @@ routeiq/
       enrich_poi_details.py   READ: Wikipedia intro + thumbnail per POI
       estimate_visit.py       READ: typical visit duration by OSM subtype
       search_poi_by_name.py   READ: Nominatim geocoder — resolves named places to lat/lon
+      select_pois_for_day.py  READ: activity-based POI selection via two-track merge
+      get_travel_time.py      READ: A* road-time between two lat/lon points
   ratings/
     base.py                   POIRatingProvider ABC + RatedPOI dataclass
     factory.py                RatingsFactory — selects provider from RATING_PROVIDER env var
@@ -223,6 +264,12 @@ routeiq/
     poi_indexer.py            ChromaDB collection management
     knowledge_rag.py          3-stage GraphRAG: vector → graph augment → context
     vector_baseline.py        Pure semantic baseline (no graph) for evaluation
+  activities/
+    base.py                   ActivityClassifier ABC + ActivityMatch dataclass
+    factory.py                ActivityClassifierFactory — selects provider from env var
+    osm_classifier.py         OSM-tag-based activity classifier (offline)
+    tavily_classifier.py      Tavily web-search activity classifier (richer coverage)
+    ranker.py                 ActivityRanker — two-track merge of activity + scenic POIs
   routing/
     detour_scorer.py          Straight-line detour cost per POI (Strategy)
     poi_selector.py           Top-N selection with category weighting
@@ -247,7 +294,14 @@ eval/
   agent_eval_queries.py       6 agent evaluation test cases + PREFERENCE_KEYWORDS map
   agent_evaluator.py          stop count · pref match · faithfulness · refinement delta scoring
   run_agent_eval.py           CLI runner — saves eval/results_week3.md
-tests/                        213 unit tests across 22 files
+  run_week4_eval.py           Week 4 CLI runner — 5-config × N-query eval, saves eval/results_week4.md
+  evaluators.py               LLM-as-judge recall + routing pass scorers
+  langsmith_dataset.py        LangSmith dataset push helpers
+  run_tool_routing_eval.py    Tool routing golden eval (8 cases)
+  tool_routing_queries.py     8 golden tool routing cases
+  results_week4.md            Latest smoke test results (5 configs × 15 queries)
+  results_tool_routing.md     Tool routing eval results (8/8)
+tests/                        315 unit tests across 24 files
 docs/
   README-routeplanner.md      Full Route Planner documentation
   week3-submission.md         Week 3 agent framework + prompts + learnings
@@ -261,6 +315,7 @@ docs/
 |---|---|
 | [docs/README-routeplanner.md](docs/README-routeplanner.md) | Full Route Planner architecture, sequence diagrams, pre-seeding guide |
 | [docs/week3-submission.md](docs/week3-submission.md) | Week 3 agent framework, all prompts, iterations, learnings |
+| [docs/week4-submission.md](docs/week4-submission.md) | Week 4 activity eval — 5-config matrix, 9 improvements, full results |
 | [docs/Architecture-and-Design-Decisions.md](docs/Architecture-and-Design-Decisions.md) | Full architecture rationale across all weeks |
 | [prompts.md](prompts.md) | Running log of every prompt iteration — what changed and why |
 

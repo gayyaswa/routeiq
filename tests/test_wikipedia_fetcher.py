@@ -5,6 +5,7 @@ import pytest
 import requests
 
 from routeiq.graph.poi import POI
+import routeiq.rag.wikipedia_fetcher as _wiki_mod
 from routeiq.rag.wikipedia_fetcher import WikipediaFetcher, _DESCRIPTION_MAX_CHARS
 
 
@@ -66,6 +67,9 @@ class TestResolveTitle:
 # ── enrich ─────────────────────────────────────────────────────────────────
 
 class TestEnrich:
+    def setup_method(self):
+        # Reset the module-level cache so mocked sessions aren't bypassed by real cached data.
+        _wiki_mod._cache = {}
     def test_sets_description_and_image_url(self):
         summary_data = {
             "extract": "Enchanted Rock is a giant pink granite dome rising 425 feet above the surrounding terrain.",

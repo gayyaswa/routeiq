@@ -56,11 +56,21 @@ def _emit_progress(thread_id: str, step: str, subtask: str = "") -> None:
         d = _progress_registry.get(thread_id)
     if d is None:
         return
+    now = time.perf_counter()
     current = d.get("current")
     if current and current != step:
+        # Accumulate elapsed wall-clock for the step that just finished.
+        # += so multi-iteration ReAct loops (rate_pois called twice, etc.) sum correctly.
+        step_start = d.get("step_start")
+        if step_start is not None:
+            step_times: dict = d.get("step_times") or {}
+            step_times[current] = step_times.get(current, 0.0) + (now - step_start)
+            d["step_times"] = step_times
         done: set = set(d.get("done") or set())
         done.add(current)
         d["done"] = done
+    if step != current:
+        d["step_start"] = now
     d["current"] = step
     d["subtask"] = subtask
 
@@ -108,6 +118,7 @@ class DayTripItinerary(BaseModel):
 
 def _execute_tool(tool_call: dict[str, Any]) -> ToolMessage:
     """Dispatch a single tool call and return the ToolMessage result."""
+    from routeiq.timing import log as _tlog
     name = tool_call["name"]
     args = tool_call["args"]
     tool_map = {t.name: t for t in ALL_TOOLS}
@@ -115,7 +126,9 @@ def _execute_tool(tool_call: dict[str, Any]) -> ToolMessage:
         result = f"Unknown tool: {name}"
     else:
         try:
+            _t0 = time.perf_counter()
             result = tool_map[name].invoke(args)
+            _tlog(f"tool={name} elapsed={time.perf_counter()-_t0:.2f}s")
         except Exception as exc:
             result = f"Tool error: {exc}"
     return ToolMessage(content=str(result), tool_call_id=tool_call["id"], name=name)
@@ -354,9 +367,14 @@ def _plan(state: DayTripState, config: Optional[RunnableConfig] = None) -> dict:
                 not bool(state["messages"]), len(messages))
 
     # Phase 1 — ReAct loop: execute tools until the LLM stops calling them
+    from routeiq.timing import log as _tlog, clear as _tclear
+    _tclear()
     max_iterations = 12
+    _iter_t0 = time.perf_counter()
     for iteration in range(max_iterations):
+        _llm_t0 = time.perf_counter()
         response: AIMessage = llm_with_tools.invoke(messages)
+        _llm_elapsed = time.perf_counter() - _llm_t0
         messages.append(response)
 
         if not response.tool_calls:
@@ -383,11 +401,13 @@ def _plan(state: DayTripState, config: Optional[RunnableConfig] = None) -> dict:
                     )
                 messages.append(HumanMessage(content=nudge))
                 continue
+            _tlog(f"iter={iteration} llm_think={_llm_elapsed:.2f}s tools=[] → STOP total_react={time.perf_counter()-_iter_t0:.2f}s")
             logger.info("ReAct loop iter=%d no tool calls → stopping (response_len=%d)",
                         iteration, len(response.content or ""))
             break
 
         tool_names = [tc["name"] for tc in response.tool_calls]
+        _tlog(f"iter={iteration} llm_think={_llm_elapsed:.2f}s tools={tool_names}")
         logger.debug("ReAct loop iter=%d tools=%s", iteration, tool_names)
 
         # Emit progress for the first tool in each iteration

@@ -1,6 +1,7 @@
 from __future__ import annotations
 import dataclasses
 import json
+import time
 
 from langchain_core.tools import tool
 
@@ -40,8 +41,11 @@ def select_pois_for_day(
     if not pois:
         return json.dumps([])
 
+    from routeiq.timing import log as _tlog
     classifier = create_activity_classifier()
+    _t_classify = time.perf_counter()
     classified = classifier.classify_batch(city, pois, requested_activities)
+    _tlog(f"select_pois classify_batch={time.perf_counter()-_t_classify:.2f}s activities={requested_activities}")
 
     ranker = create_ranker(user_context, ratings_available=False)
     selector = ActivityPOISelector()

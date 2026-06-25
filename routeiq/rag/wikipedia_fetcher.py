@@ -1,6 +1,10 @@
 """Fetches Wikipedia summary text and thumbnail URL for POI enrichment (Strategy pattern)."""
 from __future__ import annotations
 
+import json
+import os
+import threading
+
 import requests
 
 from routeiq.graph.poi import POI
@@ -9,6 +13,36 @@ _SUMMARY_URL = "https://en.wikipedia.org/api/rest_v1/page/summary/{title}"
 _SEARCH_URL = "https://en.wikipedia.org/w/api.php"
 _DESCRIPTION_MAX_CHARS = 500
 _REQUEST_TIMEOUT = 15  # Wikipedia API can respond slowly; 5s caused silent enrichment failures
+
+# TODO: unify with llm_synthetic.py and tavily_classifier.py into a shared CacheLayer.
+# All three follow the same pattern: JSON file, TTL optional, keyed by a string identifier.
+_CACHE_PATH = "./cache/wikipedia/descriptions.json"
+_cache_lock = threading.Lock()
+_cache: dict[str, dict] | None = None  # {poi_name: {description, image_url}}
+
+
+def _load_cache() -> dict[str, dict]:
+    global _cache
+    if _cache is not None:
+        return _cache
+    with _cache_lock:
+        if _cache is not None:
+            return _cache
+        os.makedirs(os.path.dirname(_CACHE_PATH), exist_ok=True)
+        try:
+            with open(_CACHE_PATH) as f:
+                _cache = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            _cache = {}
+    return _cache
+
+
+def _write_cache(cache: dict) -> None:
+    try:
+        with open(_CACHE_PATH, "w") as f:
+            json.dump(cache, f)
+    except Exception:
+        pass
 
 
 class WikipediaFetcher:
@@ -25,9 +59,21 @@ class WikipediaFetcher:
 
     def enrich(self, poi: POI) -> None:
         """Mutates poi in-place: sets description and image_url from Wikipedia."""
+        cache = _load_cache()
+        hit = cache.get(poi.name)
+        if hit is not None:
+            poi.description = hit.get("description") or poi.description
+            poi.image_url = hit.get("image_url") or poi.image_url
+            return
+
         title = self._resolve_title(poi)
         if not title:
+            # Cache the miss so we don't retry on every refinement run
+            with _cache_lock:
+                cache[poi.name] = {"description": None, "image_url": None}
+            _write_cache(cache)
             return
+
         try:
             resp = self._session.get(
                 _SUMMARY_URL.format(title=requests.utils.quote(title, safe="")),
@@ -67,6 +113,13 @@ class WikipediaFetcher:
                             break
         except Exception:
             pass  # graceful degradation — narrative falls back to name + category
+
+        with _cache_lock:
+            cache[poi.name] = {
+                "description": poi.description,
+                "image_url": poi.image_url,
+            }
+        _write_cache(cache)
 
     def _resolve_title(self, poi: POI) -> str | None:
         """Returns Wikipedia article title from OSM tag or name-based search fallback."""

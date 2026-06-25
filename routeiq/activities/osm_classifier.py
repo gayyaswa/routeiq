@@ -68,4 +68,11 @@ class OSMActivityClassifier(ActivityClassifier):
             if activity in activity_set and keyword in cat:
                 matched.add(activity)
 
+        # Name-based fallback: catch POIs whose *name* signals an activity even when
+        # OSM subtype tags don't (e.g. "Lands End Trail" has subtype=viewpoint, not peak).
+        name = (poi.name or "").lower()
+        for keyword, activity in _CATEGORY_KEYWORDS.items():
+            if activity in activity_set and keyword in name:
+                matched.add(activity)
+
         return list(matched)

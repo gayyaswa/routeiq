@@ -22,6 +22,39 @@ def _scenic_score(c: ClassifiedPOI) -> int:
     return _SCENIC_SCORE.get(c.poi.subtype or "", _DEFAULT_SCENIC)
 
 
+def _slots_for_activity(candidates: list) -> int:
+    n = len(candidates)
+    return 3 if n >= 11 else (2 if n >= 4 else (1 if n else 0))
+
+
+def _scale_slots_proportional(raw_slots: dict[str, int], budget: int) -> dict[str, int]:
+    result = dict.fromkeys(raw_slots, 0)
+    if budget <= 0:
+        return result
+    # Only activities with candidates can receive slots; sort by density desc
+    active = sorted(((act, w) for act, w in raw_slots.items() if w > 0), key=lambda x: -x[1])
+    if not active:
+        return result
+    total_weight = sum(w for _, w in active)
+    remaining = budget
+    for i, (act, w) in enumerate(active):
+        acts_left = len(active) - i
+        if remaining <= 0:
+            break
+        if acts_left > remaining:
+            # Budget scarce — give 1 to this activity and move on
+            result[act] = 1
+            remaining -= 1
+        else:
+            # Reserve at least 1 for each remaining activity, then give proportional share
+            share = max(1, round(w / total_weight * budget))
+            share = min(share, remaining - (acts_left - 1))
+            result[act] = share
+            remaining -= share
+            total_weight -= w
+    return result
+
+
 class ActivityPOISelector:
     """Merges activity-matched (Track 1) and scenic-fill (Track 2) POIs into an itinerary."""
 
@@ -35,31 +68,49 @@ class ActivityPOISelector:
         ranker: ActivityRanker | None = None,
     ) -> list[ClassifiedPOI]:
         ratings = ratings or {}
-        n_activity_slots = min(len(requested_activities), 3) if requested_activities else 0
-        n_scenic_slots = total_stops - n_activity_slots
+
+        if requested_activities:
+            candidates_by_activity = {
+                act: [c for c in classified_pois if act in c.matched_activities]
+                for act in requested_activities
+            }
+            raw_slots = {
+                act: _slots_for_activity(candidates_by_activity[act])
+                for act in requested_activities
+            }
+            per_activity_slots = _scale_slots_proportional(raw_slots, max(1, total_stops - 1))
+        else:
+            per_activity_slots = {}
 
         track1 = self._build_track1(
-            classified_pois, requested_activities, n_activity_slots,
+            classified_pois, requested_activities, per_activity_slots,
             user_context, ratings, ranker,
         )
         used_ids = {c.poi.osm_id for c in track1}
+        # Use actual track1 length, not budgeted slots — unused activity slots spill to scenic.
+        n_scenic_slots = total_stops - len(track1)
         track2 = self._build_track2(classified_pois, used_ids, n_scenic_slots)
 
         return self._order_by_geography(track1 + track2)
 
     def _build_track1(
         self,
-        classified_pois, requested_activities, n_slots,
-        user_context, ratings, ranker,
+        classified_pois,
+        requested_activities,
+        per_activity_slots: dict[str, int],
+        user_context,
+        ratings,
+        ranker,
     ) -> list[ClassifiedPOI]:
-        if not requested_activities or n_slots == 0:
+        if not requested_activities or not per_activity_slots:
             return []
 
         selected: list[ClassifiedPOI] = []
 
         for activity in requested_activities:
-            if len(selected) >= n_slots:
-                break
+            n = per_activity_slots.get(activity, 0)
+            if n == 0:
+                continue
             candidates = [
                 c for c in classified_pois
                 if activity in c.matched_activities
@@ -70,8 +121,7 @@ class ActivityPOISelector:
 
             active_ranker = ranker or create_ranker(user_context, bool(ratings))
             ranked = active_ranker.rank(candidates, activity, user_context, ratings)
-            if ranked:
-                selected.append(ranked[0])
+            selected.extend(ranked[:n])
 
         return selected
 

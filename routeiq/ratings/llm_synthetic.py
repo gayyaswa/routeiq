@@ -100,7 +100,16 @@ class LLMSyntheticRatingProvider(POIRatingProvider):
             pass
         return items
 
+    # 50 POIs × ~120 chars each ≈ 6K tokens per batch; 900-POI single call caused context overflow.
+    _BATCH_SIZE = 50
+
     def _call_llm(self, city: str, pois: list[POI]) -> list[dict[str, Any]]:
+        results: list[dict[str, Any]] = []
+        for i in range(0, len(pois), self._BATCH_SIZE):
+            results.extend(self._call_llm_single(city, pois[i:i + self._BATCH_SIZE]))
+        return results
+
+    def _call_llm_single(self, city: str, pois: list[POI]) -> list[dict[str, Any]]:
         poi_entries = []
         for p in pois:
             entry: dict[str, Any] = {"name": p.name, "category": p.category}

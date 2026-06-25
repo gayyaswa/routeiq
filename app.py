@@ -74,6 +74,8 @@ _STEPPER_CSS = """
 .riq-label.riq-done{color:#22c55e;}
 .riq-label.riq-active{color:#3b82f6;}
 .riq-label.riq-pending{color:#9ca3af;}
+.riq-timing{font-size:12px;font-weight:400;margin-left:6px;opacity:0.7;}
+.riq-timing-live{color:#3b82f6;opacity:1;}
 .riq-subtask{font-size:13px;color:#6b7280;font-style:italic;margin-left:30px;margin-bottom:4px;}
 .riq-slow-warn{font-size:12px;font-weight:600;color:#b45309;background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;padding:5px 10px;margin-left:30px;margin-bottom:8px;}
 .riq-connector{width:2px;height:14px;background:#e5e7eb;margin-left:13px;margin-bottom:4px;}
@@ -103,11 +105,14 @@ _DT_STEPS = [
 
 
 def _render_stepper(state: dict, steps=None) -> str:
+    import time as _time
     if steps is None:
         steps = _STEPS
     current = state.get("current")
     done = state.get("done", set())
     subtask = state.get("subtask", "")
+    step_times: dict = state.get("step_times") or {}
+    step_start: float | None = state.get("step_start")
 
     rows = [_STEPPER_CSS, '<div class="riq-stepper">']
     for i, (step_id, label, icon) in enumerate(steps):
@@ -118,10 +123,19 @@ def _render_stepper(state: dict, steps=None) -> str:
         else:
             icon_cls, label_cls, display_icon = "", "riq-pending", "⭕"
 
+        # Timing badge: elapsed for done steps, live counter for active step
+        timing_html = ""
+        if step_id in step_times:
+            t = step_times[step_id]
+            timing_html = f'<span class="riq-timing">({t:.0f}s)</span>'
+        elif step_id == current and step_start is not None:
+            live = _time.perf_counter() - step_start
+            timing_html = f'<span class="riq-timing riq-timing-live">({live:.0f}s…)</span>'
+
         rows.append(
             f'<div class="riq-step">'
             f'<span class="riq-icon {icon_cls}">{display_icon}</span>'
-            f'<span class="riq-label {label_cls}">{label}</span>'
+            f'<span class="riq-label {label_cls}">{label}{timing_html}</span>'
             f'</div>'
         )
         if step_id == current and subtask:
@@ -509,6 +523,21 @@ tab1, tab2 = st.tabs(["🏙 Day Trip Planner", "🗺 Route Planner"])
 # TAB 1 — Day Trip Planner
 # ═══════════════════════════════════════════════════════════════════════════════
 
+_ACTIVITY_TEXT_KEYWORDS: dict[str, list[str]] = {
+    "hiking":   ["hiking", "hike", "trail", "trails", "trek", "trekking"],
+    "biking":   ["biking", "bike", "cycling", "cycle"],
+    "swimming": ["swimming", "swim"],
+    "kayaking": ["kayaking", "kayak"],
+    "kids":     ["kids", "kid", "family", "families", "children", "child", "toddler"],
+    "picnic":   ["picnic"],
+}
+
+def _infer_activities_from_text(text: str) -> list[str]:
+    """Return activity tags detected in a free-text style phrase."""
+    low = text.lower()
+    return [act for act, kws in _ACTIVITY_TEXT_KEYWORDS.items() if any(kw in low for kw in kws)]
+
+
 # Cities pre-loaded in the Bay Area KG master — instant POI lookup, no Overpass call
 _DEMO_CITIES_FAST = [
     "San Francisco, CA", "Oakland, CA", "Berkeley, CA",
@@ -578,6 +607,10 @@ with tab1:
             placeholder="e.g. scenic coastal hiking, easy family trails",
             key="dt_user_context",
         )
+        if dt_user_context and not dt_activities:
+            _preview = _infer_activities_from_text(dt_user_context)
+            if _preview:
+                st.caption(f"Activity tags detected: {', '.join(_preview)}")
 
     dt_phase = st.session_state.get("dt_phase", "idle")
     dt_thread_id = st.session_state.setdefault("dt_thread_id", str(uuid.uuid4()))
@@ -633,6 +666,14 @@ with tab1:
         st.session_state["dt_result_holder"] = rh
         st.session_state["dt_progress"] = dt_progress
         st.session_state["dt_progress_thread_id"] = new_thread_id
+        # If the user left the multiselect empty but described activities in the text
+        # input, infer activity tags from the text so select_pois_for_day is invoked.
+        _explicit = list(dt_activities)
+        _inferred = _infer_activities_from_text(dt_user_context) if not _explicit else []
+        final_activities = _explicit or _inferred
+        if _inferred:
+            _logger.info("plan_btn: inferred activities from user_context text: %s", _inferred)
+
         initial_state = {
             "messages": [],
             "city": dt_city_norm,
@@ -643,7 +684,7 @@ with tab1:
             "route_coords": None,
             "approved": False,
             "narrative": None,
-            "activities": list(dt_activities),
+            "activities": final_activities,
             "user_context": dt_user_context.strip(),
             "activity_fallback_note": None,
         }
@@ -701,6 +742,15 @@ with tab1:
                     st.session_state["dt_plan_elapsed"] = (
                         round(time.perf_counter() - plan_start) if plan_start else None
                     )
+                    # Per-step timing breakdown from the progress dict
+                    _prog = st.session_state.get("dt_progress", {})
+                    _step_times: dict = dict(_prog.get("step_times") or {})
+                    # Record the final active step's elapsed if it wasn't closed
+                    _final_step = _prog.get("current")
+                    _final_start = _prog.get("step_start")
+                    if _final_step and _final_start and _final_step not in _step_times:
+                        _step_times[_final_step] = time.perf_counter() - _final_start
+                    st.session_state["dt_step_times"] = _step_times
                     # Tool call count from agent messages
                     from langchain_core.messages import ToolMessage as _ToolMessage
                     msgs = snapshot.values.get("messages") or []
@@ -738,6 +788,20 @@ with tab1:
                     _mc1.metric("⏱ Planned in", f"{_elapsed}s" if _elapsed is not None else "—")
                     _mc2.metric("🔧 Tool calls", str(_tool_calls) if _tool_calls is not None else "—")
                     _mc3.metric("📍 Stops", str(len(stops)))
+                    # Per-step timing breakdown
+                    _step_times = st.session_state.get("dt_step_times") or {}
+                    if _step_times:
+                        _step_labels = {s[0]: s[1] for s in _DT_STEPS}
+                        _ls_project = "routeiq-week4"
+                        _ls_url = f"https://smith.langchain.com/projects/p?name={_ls_project}"
+                        _breakdown_lines = " · ".join(
+                            f"{_step_labels.get(k, k)}: **{v:.0f}s**"
+                            for k, v in _step_times.items()
+                        )
+                        st.caption(
+                            f"Step breakdown — {_breakdown_lines} · "
+                            f"[View in LangSmith ↗]({_ls_url})"
+                        )
                 route_coords_draft = st.session_state.get("dt_route_coords") or []
                 m_draft = _render_dt_map(stops, route_coords_draft, height=300)
                 st_folium(m_draft, height=300, use_container_width=True, returned_objects=[])

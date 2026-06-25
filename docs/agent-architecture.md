@@ -257,6 +257,111 @@ In Streamlit:
 
 ---
 
+## Week 4 — Activity-Based Planning Layer
+
+### What changed
+
+Week 4 adds an **activity selection layer** that intercepts POI discovery before enrichment. When
+the user requests activities (hiking, biking, swimming, kayaking, kids, picnic), the agent calls
+`select_pois_for_day` instead of `find_city_pois`. The two-track merge ensures activity-matched
+stops never crowd out scenic variety.
+
+![Activity pipeline data flow and bug locations fixed in Week 4](./images/eval_activity_pipeline.png)
+
+### The 6th tool — select_pois_for_day
+
+```
+User sets activities=["hiking", "swimming"]
+    │
+    ▼
+select_pois_for_day(city, requested_activities, user_context, total_stops)
+    │
+    ├── ActivityClassifier.classify_batch(city, all_pois, activities)
+    │       OSMActivityClassifier:  tag lookup → peak→hiking, beach→swimming (instant, 0ms)
+    │       TavilyActivityClassifier: web search per POI name → LLM extracts activity signal
+    │
+    ├── ActivityRanker.rank(classified_pois, user_context)
+    │       SemanticRanker:  cosine sim between user_context and poi description
+    │       ScoredRanker:    rating × recency weight (when ratings already available)
+    │
+    └── ActivityPOISelector.select(classified, activities, total_stops)
+            Track 1 (activity slots):  proportional budget — 1 slot for 1-4 matches,
+                                        2 slots for 5-10 matches, 3+ for larger pools
+            Track 2 (scenic fills):    top unmatched POIs by scenic score fill remaining slots
+            Output field per stop:
+              track              = "activity" | "scenic"
+              matched_activities = ["hiking"] or []
+              activity_evidence  = "OSM tag: peak" or "Tavily: known for coastal hikes"
+```
+
+### Tool routing — the key behavioral signal
+
+```
+activities non-empty  →  select_pois_for_day   (classifier runs, activity-aware two-track merge)
+activities empty      →  find_city_pois         (scenic-only path, same as Week 3)
+```
+
+The `_plan` node's iter=0 nudge is activity-aware: if activities are set and the LLM hesitates
+on the first iteration, it is explicitly nudged to call `select_pois_for_day` — never
+`find_city_pois`.
+
+### Updated ReAct loop — Improvement 9
+
+![ReAct loop before vs after Improvement 9 — 12 iterations → 2-3](./images/eval_react_loop_fix.png)
+
+`rate_pois` now pre-populates `visit_duration_min` from the same lookup table as
+`estimate_visit_duration`. The V2 prompt explicitly tells the LLM: *"Do NOT call
+enrich_poi_details or estimate_visit_duration — data is already present."*
+
+Result: 12 iterations (hit cap, never stopped naturally) → 2–3 iterations (stops after `rate_pois`).
+Plan time: ~56s → ~36s total react time for SF swimming.
+
+### Expanded rating providers
+
+`routeiq/ratings/` now has 5 providers, all behind `RatingsFactory.create(RATING_PROVIDER)`:
+
+| Provider | `RATING_PROVIDER` | What it returns |
+|---|---|---|
+| `TripAdvisorRatingProvider` | `tripadvisor` | Real ratings, up to 5 photos, 3 review snippets |
+| `LLMSyntheticRatingProvider` | `llm_synthetic` | Plausible synthetic ratings from Wikipedia description |
+| `TavilyEnrichmentProvider` | `tavily_enrichment` | Web-searched ratings + snippets (no TA key required) |
+| `FoursquareRatingProvider` | `foursquare` | Tips, hours, 0–10 rating normalized to 0–5 |
+| `NullRatingProvider` | (fallback) | Empty enrichment — agent works with no keys |
+
+### New package — routeiq/activities/
+
+```
+routeiq/activities/
+  base.py              ActivityClassifier ABC — classify_batch(city, pois, activities) → list[ClassifiedPOI]
+  osm_classifier.py    OSMActivityClassifier — tag lookup, zero latency, zero API calls
+  tavily_classifier.py TavilyActivityClassifier — web search + LLM extraction
+  ranker.py            ActivityRanker — semantic + scored ranking strategies
+  factory.py           create_activity_classifier(ACTIVITY_PROVIDER), create_ranker()
+```
+
+### Timing instrumentation — routeiq/timing.py
+
+`timing.log(msg)` appends timestamped lines to `logs/timing.log`; `timing.clear()` resets at
+each planning run. Lines go to file only (never stdout), so the UI is unaffected.
+Used to diagnose the 12-iteration problem and verify the fix.
+
+### Eval framework — eval/
+
+```
+eval/
+  langsmith_dataset.py      30 golden queries: WEEK4_EVAL_QUERIES, ACTIVITY_KEYWORDS
+  tool_routing_queries.py   8 tool routing golden cases (4 with activities, 4 without)
+  evaluators.py             score_tool_routing(), score_activity_recall(),
+                            score_enrichment_quality(), score_activity_match_quality(),
+                            ActivityEvaluator class
+  run_week4_eval.py         5-config sweep (150 calls) → eval/results_week4.md
+  run_tool_routing_eval.py  Fast routing check (8 calls) → eval/results_tool_routing.md
+```
+
+Judge methods: code-based (routing, recall, enrichment) + LLM-as-judge (match quality 1–5).
+
+---
+
 ## Design Decisions
 
 | # | Decision | Why |
