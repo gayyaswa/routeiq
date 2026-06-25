@@ -22,3 +22,19 @@ day1_map.html
 docs/handoff-session-*.md
 logs/
 docs/demo-script.md
+
+# TripAdvisor per-POI and per-review fetch caches (ephemeral, auto-generated per query)
+cache/ratings/tripadvisor_poi_*.json
+cache/ratings/tripadvisor_review_*.json
+
+# Wikipedia description cache (auto-generated)
+cache/wikipedia/
+
+# Eval run logs
+eval/*.log
+eval/*.txt
+
+# Course assignment files (not project code)
+docs/eval_week4/Social Media*
+docs/eval_week4/Week4 Project*
+docs/eval_week4/eval-plan-session-*.md
