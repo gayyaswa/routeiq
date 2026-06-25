@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
-  <title>RouteIQ — Week 4 Evaluation Report</title>
+  <title>RouteIQ Week 4 Eval</title>
   <style>
     /* Default styles provided by pandoc.
     ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
@@ -24,26 +24,11 @@
     }
     .display.math{display: block; text-align: center; margin: 0.5rem auto;}
   </style>
-  <link rel="stylesheet" href="" />
-  <style>
-    body { font-family: Georgia, serif; font-size: 14px; max-width: 900px; margin: 40px auto; padding: 0 24px; color: #1a1a1a; line-height: 1.6; }
-    h1 { font-size: 22px; border-bottom: 2px solid #333; padding-bottom: 8px; }
-    h2 { font-size: 18px; margin-top: 36px; border-bottom: 1px solid #ccc; padding-bottom: 4px; }
-    h3 { font-size: 15px; margin-top: 24px; }
-    table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13px; }
-    th { background: #f0f0f0; border: 1px solid #bbb; padding: 6px 10px; text-align: left; }
-    td { border: 1px solid #ccc; padding: 6px 10px; vertical-align: top; }
-    tr:nth-child(even) { background: #fafafa; }
-    code { background: #f4f4f4; padding: 1px 4px; border-radius: 3px; font-size: 12px; }
-    pre { background: #f4f4f4; padding: 12px; border-radius: 4px; overflow-x: auto; font-size: 12px; }
-    blockquote { border-left: 3px solid #ccc; margin: 0; padding-left: 16px; color: #555; }
-    hr { border: none; border-top: 1px solid #ddd; margin: 24px 0; }
-    strong { color: #111; }
-  </style>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/github-markdown-css/github-markdown.css" />
 </head>
 <body>
 <header id="title-block-header">
-<h1 class="title">RouteIQ — Week 4 Evaluation Report</h1>
+<h1 class="title">RouteIQ Week 4 Eval</h1>
 </header>
 <h1 id="routeiq-week-4-evaluation-report">RouteIQ — Week 4 Evaluation
 Report</h1>
@@ -586,6 +571,12 @@ id="happy-path-eval-15-queries-5-configurations-2026-06-25">Happy-Path
 Eval — 15 Queries × 5 Configurations (2026-06-25)</h3>
 <p>Run date: 2026-06-25. SF Q1–Q8 + NYC Q9–Q15 across all 5
 configurations.</p>
+<blockquote>
+<p><strong>Raw data:</strong> <a
+href="https://github.com/gayyaswa/routeiq/blob/main/eval/results_week4.csv"><code>eval/results_week4.csv</code></a>
+— 75 rows, one per run × query. All numbers in the tables below are
+derived from this file.</p>
+</blockquote>
 <p><strong>Run 1 — OSM + LLM-Synthetic (baseline)</strong></p>
 <table>
 <colgroup>
@@ -912,6 +903,10 @@ Comparison Summary (Happy-Path 15 queries, 2026-06-25)</h3>
 </table>
 <p><strong>Routing accuracy: 15/15 (100%) across all 5
 configurations.</strong> Both fixes hold under every config.</p>
+<p><em>Source: <a
+href="https://github.com/gayyaswa/routeiq/blob/main/eval/results_week4.csv"><code>eval/results_week4.csv</code></a>
+— filter by <code>config</code> column to verify any cell
+above.</em></p>
 <p><strong>Which config to use:</strong></p>
 <p>The Tavily classifier is the single largest lever: +17% recall across
 all rating providers, and the only way to reach picnic and

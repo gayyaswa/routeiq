@@ -291,6 +291,8 @@ With activities: 4/4. Without activities: 4/4. Both fixes verified.
 
 Run date: 2026-06-25. SF Q1–Q8 + NYC Q9–Q15 across all 5 configurations.
 
+> **Raw data:** [`eval/results_week4.csv`](https://github.com/gayyaswa/routeiq/blob/main/eval/results_week4.csv) — 75 rows, one per run × query. All numbers in the tables below are derived from this file.
+
 **Run 1 — OSM + LLM-Synthetic (baseline)**
 
 | # | City | Activities | Stops | Recall | Routing | Time | Pass |
@@ -371,6 +373,8 @@ Enrichment: 38% rated, 25% with reviews, 38% with photos, avg rating 4.49, match
 | Avg match quality (1–5) | 3.72 | 3.64 | 3.73 | **3.74** | 3.62 |
 
 **Routing accuracy: 15/15 (100%) across all 5 configurations.** Both fixes hold under every config.
+
+*Source: [`eval/results_week4.csv`](https://github.com/gayyaswa/routeiq/blob/main/eval/results_week4.csv) — filter by `config` column to verify any cell above.*
 
 **Which config to use:**
 
