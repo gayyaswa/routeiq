@@ -24,6 +24,7 @@ Output:
 """
 from __future__ import annotations
 import argparse
+import csv
 import os
 import sys
 from datetime import datetime
@@ -250,6 +251,51 @@ def main() -> None:
     content += "\n".join(full_output)
     results_path.write_text(content)
     print(f"\nResults saved to: {results_path}")
+
+    csv_path = Path(__file__).parent / "results_week4.csv"
+    _write_csv(csv_path, all_run_results, timestamp)
+    print(f"CSV saved to:     {csv_path}")
+
+
+def _write_csv(path: Path, run_results: list[tuple[dict, list[dict]]], timestamp: str) -> None:
+    fieldnames = [
+        "generated_at", "run", "config",
+        "activity_provider", "rating_provider",
+        "query_id", "city", "activities",
+        "stop_count", "activity_recall_pct",
+        "routing_pass", "first_poi_tool", "tool_calls", "elapsed_s",
+        "pass_fail",
+        "pct_rated", "pct_with_reviews", "pct_with_photos", "avg_rating",
+        "pct_with_evidence", "avg_match_quality",
+    ]
+    with path.open("w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        for i, (cfg, rows) in enumerate(run_results, start=1):
+            for row in rows:
+                writer.writerow({
+                    "generated_at": timestamp,
+                    "run": f"Run {i}",
+                    "config": cfg["short"],
+                    "activity_provider": cfg["env"]["ACTIVITY_PROVIDER"],
+                    "rating_provider": cfg["env"]["RATING_PROVIDER"],
+                    "query_id": row["id"],
+                    "city": row["city"],
+                    "activities": ", ".join(row.get("activities") or []),
+                    "stop_count": row["stop_count"],
+                    "activity_recall_pct": f"{row['activity_recall']:.0%}",
+                    "routing_pass": "PASS" if row.get("routing_pass") else "FAIL",
+                    "first_poi_tool": row.get("actual_first_poi_tool", ""),
+                    "tool_calls": row["tool_call_count"],
+                    "elapsed_s": row["elapsed_s"],
+                    "pass_fail": row["pass_fail"],
+                    "pct_rated": f"{row.get('pct_rated', 0):.0%}",
+                    "pct_with_reviews": f"{row.get('pct_with_reviews', 0):.0%}",
+                    "pct_with_photos": f"{row.get('pct_with_photos', 0):.0%}",
+                    "avg_rating": f"{row['avg_rating']:.2f}" if row.get("avg_rating") is not None else "",
+                    "pct_with_evidence": f"{row.get('pct_with_evidence', 0):.0%}",
+                    "avg_match_quality": f"{row['avg_match_quality']:.2f}" if row.get("avg_match_quality") is not None else "",
+                })
 
 
 def _write_analysis(run_results: list[tuple[dict, list[dict]]]) -> str:
