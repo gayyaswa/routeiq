@@ -864,6 +864,7 @@ with tab1:
                             args=(feedback_text.strip(), config, dt_graph, rh3), daemon=True
                         )
                         st.session_state["dt_thread"] = t
+                        st.session_state["dt_plan_start"] = time.perf_counter()
                         t.start()
                         st.rerun()
 
