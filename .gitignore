@@ -23,16 +23,13 @@ docs/handoff-session-*.md
 logs/
 docs/demo-script.md
 
-# TripAdvisor per-POI and per-review fetch caches (ephemeral, auto-generated per query)
-cache/ratings/tripadvisor_poi_*.json
-cache/ratings/tripadvisor_review_*.json
-
-# Wikipedia description cache (auto-generated)
-cache/wikipedia/
-
-# Eval run logs
+# Eval run logs (terminal output, not useful to cloners)
 eval/*.log
 eval/*.txt
+
+# cache/ratings/tripadvisor_poi_*.json and tripadvisor_review_*.json are intentionally NOT ignored
+# cache/wikipedia/ is intentionally NOT ignored
+# Both committed for zero cold-start on clone (same policy as tripadvisor_photos_*.json)
 
 # Course assignment files (not project code)
 docs/eval_week4/Social Media*
