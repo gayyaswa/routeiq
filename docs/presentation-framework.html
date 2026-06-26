@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 900px; margin: 40px auto; color: #1a1a1a; line-height: 1.6; }
+    h1 { font-size: 24px; border-bottom: 2px solid #4a90d9; padding-bottom: 8px; }
+    h2 { font-size: 18px; color: #2c5f9e; margin-top: 32px; }
+    h3 { font-size: 15px; color: #444; margin-top: 20px; }
+    p { margin: 8px 0; }
+    table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+    th { background-color: #2c5f9e; color: white; padding: 8px 12px; text-align: left; }
+    td { border: 1px solid #ccc; padding: 8px 12px; vertical-align: top; }
+    tr:nth-child(even) { background-color: #f5f8ff; }
+    code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: monospace; font-size: 13px; }
+    pre { background: #f0f0f0; padding: 14px 16px; border-radius: 4px; font-family: monospace; font-size: 13px; line-height: 1.5; }
+    ul { margin: 6px 0; padding-left: 22px; }
+    li { margin: 4px 0; }
+    .section-label { font-size: 11px; font-weight: bold; text-transform: uppercase; color: #888; letter-spacing: 0.5px; }
+  </style>
+</head>
+<body>
+
+<h1>RouteIQ — Presentation Framework</h1>
+
+<!-- ── 1. Use Case ── -->
+<h2>1. Use Case</h2>
+<p>
+  RouteIQ answers scenic travel queries in natural language:
+  <em>"Plan a day trip in SF focused on hiking and historic sites"</em> → returns a timed
+  itinerary with real stops, photos, ratings, and a narrative. The hard problem is
+  <strong>spatial + semantic alignment</strong>: the right POIs aren't just semantically
+  close to the query — they have to be geographically reachable and worth the detour.
+</p>
+
+<!-- ── 2. Where RAG Fits ── -->
+<h2>2. Where RAG Fits</h2>
+<p>Three distinct retrieval layers working together:</p>
+<table>
+  <tr>
+    <th>Layer</th>
+    <th>What it retrieves</th>
+    <th>Why RAG (not just a DB lookup)</th>
+  </tr>
+  <tr>
+    <td><strong>Graph RAG</strong></td>
+    <td>OSM road network → spatially joined POIs along actual route</td>
+    <td>Spatial proximity alone doesn't capture "scenic" — need detour scoring</td>
+  </tr>
+  <tr>
+    <td><strong>Vector RAG</strong></td>
+    <td>ChromaDB → Wikipedia descriptions for each candidate POI</td>
+    <td>POI names are poor search keys; descriptions enable semantic reranking</td>
+  </tr>
+  <tr>
+    <td><strong>Knowledge RAG</strong></td>
+    <td>KnowledgeRAG 3-stage pipeline: (1) ChromaDB vector search by preferences → (2) KG graph filter (on-route check) + augment (city, region, nearby POIs via LOCATED_IN / NEAR_POI edges) → (3) enriched context string for LLM narrative</td>
+    <td>Vector search alone gives semantically relevant POIs but no structural context; KG enrichment adds "what's nearby", "which city", "which region" — grounding the narrative in real graph relationships</td>
+  </tr>
+  <tr>
+    <td><strong>Live RAG</strong></td>
+    <td>Tavily web search → real-time activity context ("best hiking in SF")</td>
+    <td>OSM tags miss activity quality signal entirely</td>
+  </tr>
+</table>
+<p>
+  <strong>Key insight:</strong> each layer handles a different failure mode. Graph RAG anchors stops to the real route spatially. Knowledge RAG combines vector similarity with structured entity relationships. Live RAG fills quality signal OSM can't provide. Together they cover spatial, semantic, structural, and freshness dimensions of retrieval.
+</p>
+
+<!-- ── 3. Tools the Agent Calls ── -->
+<h2>3. Tools the Agent Calls</h2>
+<p>7 tools total:</p>
+<table>
+  <tr>
+    <th>Tool</th>
+    <th>What it does</th>
+  </tr>
+  <tr><td><code>find_city_pois</code></td><td>KnowledgeGraph lookup — instant, no network call</td></tr>
+  <tr><td><code>rate_pois</code></td><td>TripAdvisor or LLM-synthetic rating per POI</td></tr>
+  <tr><td><code>select_pois_for_day</code></td><td>Activity-matched + scenic fill merge</td></tr>
+  <tr><td><code>get_travel_time</code></td><td>OSMnx A* routing between stops</td></tr>
+  <tr><td><code>fetch_wikipedia</code></td><td>Description + thumbnail image per POI</td></tr>
+  <tr><td><code>search_pois_semantic</code></td><td>ChromaDB vector retrieval</td></tr>
+  <tr><td><code>classify_activities</code></td><td>OSM or Tavily activity classifier</td></tr>
+</table>
+
+<!-- ── 4. Autonomy vs Workflow ── -->
+<h2>4. Autonomy vs. Workflow</h2>
+<table>
+  <tr>
+    <th>Mode</th>
+    <th>Where it applies</th>
+    <th>What's fixed / what's free</th>
+  </tr>
+  <tr>
+    <td><strong>Workflow</strong></td>
+    <td>LangGraph pipeline nodes</td>
+    <td>Shape is fixed: parse → graph → rag → narrate always runs in order</td>
+  </tr>
+  <tr>
+    <td><strong>Autonomy</strong></td>
+    <td>ReAct tool loop inside the graph node</td>
+    <td>Agent decides which tools to call, how many times, and retries if recall is low</td>
+  </tr>
+  <tr>
+    <td><strong>Human-in-the-loop</strong></td>
+    <td><code>interrupt()</code> before narrate</td>
+    <td>User sees draft itinerary, can refine ("add food stops"), agent replans</td>
+  </tr>
+</table>
+<p>
+  <strong>Honest framing — medium autonomy.</strong> The pipeline shape is locked (workflow),
+  but tool selection within nodes is agent-driven. This is the right trade-off: full autonomy
+  would make evaluation unreliable.
+</p>
+
+<!-- ── 5. Evaluation ── -->
+<h2>5. How We Evaluate It</h2>
+<p>15 queries × 5 configs comparing OSM vs. Tavily classifiers and LLM-synthetic vs. TripAdvisor ratings:</p>
+<table>
+  <tr>
+    <th>Config</th>
+    <th>Pass Rate</th>
+    <th>Tool Routing</th>
+    <th>Activity Recall</th>
+    <th>Avg Time</th>
+  </tr>
+  <tr><td>Run 1 — OSM + Synthetic</td><td>13 / 15</td><td>15 / 15</td><td>83%</td><td>66.0s</td></tr>
+  <tr><td>Run 2 — Tavily + Synthetic</td><td>15 / 15</td><td>15 / 15</td><td>100%</td><td>70.3s</td></tr>
+  <tr><td>Run 3 — Tavily + Enrich</td><td>14 / 15</td><td>15 / 15</td><td>90%</td><td>49.6s</td></tr>
+  <tr><td>Run 4 — OSM + TripAdvisor</td><td>13 / 15</td><td>15 / 15</td><td>83%</td><td>41.9s</td></tr>
+  <tr><td><strong>Run 5 — Tavily + TripAdvisor ✓</strong></td><td><strong>15 / 15</strong></td><td><strong>15 / 15</strong></td><td><strong>97%</strong></td><td><strong>43.8s</strong></td></tr>
+</table>
+<p><strong>Metrics tracked (5 total):</strong></p>
+<ul>
+  <li><strong>Tool routing accuracy</strong> — did the agent call the right POI discovery tool first? (<code>select_pois_for_day</code> when activities requested, <code>find_city_pois</code> otherwise) — 15/15 across all configs</li>
+  <li><strong>Activity recall</strong> — fraction of requested activities that appear in the final itinerary (83–100% across configs)</li>
+  <li><strong>Activity coverage</strong> — fraction of all itinerary stops that mention at least one requested activity</li>
+  <li><strong>Enrichment quality</strong> — % stops with a real rating, % with review snippets, % with photos (from the <code>rate_pois</code> ToolMessage)</li>
+  <li><strong>LLM-as-judge match quality</strong> — an LLM rates each activity-matched stop 1–5 on how well it suits the requested activity, using stop name + description as context (<code>avg_match_quality</code>); averaged across all Track 1 stops</li>
+</ul>
+<p><strong>What we did NOT measure (honest gap for the audience):</strong></p>
+<ul>
+  <li><strong>Geographic proximity</strong> — we never measured whether selected POIs are spatially close to the actual OSMnx route; the KnowledgeRAG Stage 2 filter checks on-route bounding box but no haversine distance metric was tracked in eval</li>
+</ul>
+<p><strong>Recommended config: Run 5 (Tavily + TripAdvisor)</strong> — best recall (97%) at competitive latency (43.8s).</p>
+
+<!-- ── Roadmap ── -->
+<h2>Roadmap — Multi-Agent Expansion</h2>
+<pre>OrchestratorAgent
+├── DayTripAgent     (existing)  → itinerary + POIs
+├── RestaurantAgent  (new)       → meal stops near each POI
+└── LodgingAgent     (new)       → hotel search + booking links</pre>
+
+<h3>RestaurantAgent — new tools</h3>
+<ul>
+  <li><code>find_restaurants_near_stop</code> — Yelp Fusion / Google Places within 500m of each stop</li>
+  <li><code>rank_by_cuisine_match</code> — match user preferences from original NL query</li>
+  <li><code>check_hours</code> — filter closed spots at the planned visit time</li>
+</ul>
+
+<h3>LodgingAgent — new tools</h3>
+<ul>
+  <li><code>search_hotels_in_city</code> — Booking.com / SerpAPI hotel search</li>
+  <li><code>filter_by_budget_proximity</code> — price range + walking distance to first stop next morning</li>
+  <li><code>generate_booking_link</code> — deep-link to provider (no live reservation needed to start)</li>
+</ul>
+
+<h3>Multi-agent evaluation additions</h3>
+<ul>
+  <li><strong>Inter-agent coherence</strong> — does the restaurant fit the time slot the DayTripAgent allocated?</li>
+  <li><strong>Constraint propagation</strong> — does a $150/night budget cap flow correctly across all agents?</li>
+  <li><strong>Parallelization gain</strong> — latency improvement when RestaurantAgent + LodgingAgent run concurrently</li>
+</ul>
+
+</body>
+</html>

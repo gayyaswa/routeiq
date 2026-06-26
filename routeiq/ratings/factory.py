@@ -21,7 +21,7 @@ class RatingsFactory:
 
     @staticmethod
     def create() -> POIRatingProvider:
-        provider = os.getenv("RATING_PROVIDER", "foursquare").lower()
+        provider = os.getenv("RATING_PROVIDER", "llm_synthetic").lower()
 
         if provider == "foursquare":
             api_key = os.getenv("FOURSQUARE_API_KEY", "")

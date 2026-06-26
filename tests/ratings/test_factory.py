@@ -27,11 +27,11 @@ class TestRatingsFactory:
                 provider = RatingsFactory.create()
         assert isinstance(provider, _NullRatingProvider)
 
-    def test_missing_api_key_env_var_returns_null_provider(self):
-        env = {k: v for k, v in os.environ.items() if k not in ("FOURSQUARE_API_KEY", "RATING_PROVIDER")}
+    def test_no_rating_provider_env_defaults_to_llm_synthetic(self):
+        env = {k: v for k, v in os.environ.items() if k != "RATING_PROVIDER"}
         with patch.dict(os.environ, env, clear=True):
             provider = RatingsFactory.create()
-        assert isinstance(provider, _NullRatingProvider)
+        assert isinstance(provider, LLMSyntheticRatingProvider)
 
     def test_google_places_returns_google_provider(self):
         with patch.dict(os.environ, {"RATING_PROVIDER": "google_places"}):

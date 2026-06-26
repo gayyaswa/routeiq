@@ -1,6 +1,6 @@
 # RouteIQ
 
-> Tell RouteIQ where you want to go and what you care about — it builds a time-scheduled day trip on a live map, complete with rated stops, Wikipedia context, and a written narrative. Refine with plain language ("skip museums", "add Lombard Street") until it's exactly your trip. Powered by a LangGraph ReAct agent, Graph RAG over OSM road networks, and Nebius `gpt-oss-120b-fast`.
+> Tell RouteIQ where you want to go and what you care about — it builds a time-scheduled, activity-matched day trip on a live map, complete with rated stops, Wikipedia context, and a written narrative. Refine with plain language ("skip museums", "add Lombard Street") until it's exactly your trip. Powered by a LangGraph ReAct agent, 4-layer RAG (Graph · Vector · Knowledge · Live), and Nebius `gpt-oss-120b-fast`.
 
 <!-- Run /generate-demo-gif to produce this -->
 ![App demo](docs/demo.gif)
@@ -26,8 +26,10 @@ streamlit run app.py
 | `NEBIUS_API_KEY` | — | Required when `LLM_PROVIDER=nebius` |
 | `NEBIUS_API_BASE` | `https://api.tokenfactory.nebius.com/v1/` | Nebius OpenAI-compatible endpoint |
 | `ANTHROPIC_API_KEY` | — | Required when `LLM_PROVIDER=anthropic` |
-| `RATING_PROVIDER` | `llm_synthetic` | `llm_synthetic` · `tripadvisor` · `foursquare` |
-| `ACTIVITY_CLASSIFIER` | `osm` | `osm` · `tavily` — classifier used by `select_pois_for_day` |
+| `RATING_PROVIDER` | `llm_synthetic` | `llm_synthetic` (default, no key needed) · `tripadvisor` · `foursquare` · `tavily_enrichment` |
+| `ACTIVITY_PROVIDER` | `osm` | `osm` · `tavily` — classifier used by `select_pois_for_day` |
+| `TAVILY_API_KEY` | — | Required for `ACTIVITY_PROVIDER=tavily` and eval Run 2/3/5 |
+| `TRIPADVISOR_API_KEY` | — | Required for `RATING_PROVIDER=tripadvisor` and eval Run 4/5 |
 
 > **Bay Area cities load instantly** — road graphs, POI data, and rating caches for San Francisco, Oakland, Berkeley, San Jose, and Santa Cruz are bundled. Other cities trigger a one-time Overpass fetch (~15–30 s), then cache locally.
 
@@ -35,7 +37,7 @@ streamlit run app.py
 
 ## What It Does
 
-Enter a city, pick interests, hours, and start time. A LangGraph ReAct agent calls five tools to find, rank, and enrich Points of Interest, then schedules them in road-time-accurate order using A\* pathfinding. A human-in-the-loop interrupt lets you review the draft map + stop cards, refine with natural language ("Add Lombard Street", "Skip museums"), and approve before the narrative is written.
+Enter a city, pick interests, activities, hours, and start time. A LangGraph ReAct agent calls seven tools to find, activity-match, rank, and enrich Points of Interest, then schedules them in road-time-accurate order using A\* pathfinding. A human-in-the-loop interrupt lets you review the draft map + stop cards, refine with natural language ("Add Lombard Street", "Skip museums"), and approve before the narrative is written.
 
 Supports any city — Bay Area corridors load instantly, other regions do a one-time Overpass fetch (~15–30 s) and cache locally.
 
@@ -54,7 +56,7 @@ flowchart TD
         K["KG warm-up: known_cities()\nIf new → Overpass fetch → add_city_pois()"]
     end
     subgraph Agent ["LangGraph Agent (plan → review → narrate)"]
-        P["plan node — ReAct tool loop\n1. find_city_pois  (KG lookup)\n2. rate_pois  (quality ranking)\n3. enrich_poi_details  (Wikipedia)\n4. estimate_visit_duration\n5. search_poi_by_name  (on refine)\n6. select_pois_for_day  (activity match)\n→ structured extraction (Pydantic)\n→ _schedule_stops (A* road routing)"]
+        P["plan node — ReAct tool loop (Prompt V3)\n1. select_pois_for_day (activities) OR find_city_pois\n2. rate_pois  (ratings + Wikipedia parallel fetch)\n3. query_poi_context  (Vector RAG + KG enrichment)\n   fallback: search_poi_by_name  (on refine)\n→ structured extraction (Pydantic)\n→ _schedule_stops (A* road routing)"]
         H["interrupt_before review\n── Human reviews draft ──\nApprove · Refine · Re-plan"]
         N["narrate node\nGenerate trip narrative"]
     end
@@ -67,14 +69,24 @@ flowchart TD
     style Preflight fill:#fff7ed,stroke:#d97706
 ```
 
+### RAG Layers — Day Trip Planner
+
+| Layer | Tool | What it retrieves | When it runs |
+|---|---|---|---|
+| **Knowledge Graph RAG** | `find_city_pois` | RouteKnowledgeGraph in-memory lookup: City → POI → NEAR\_POI edges | Step 1 — instant, no network |
+| **Live RAG** | `select_pois_for_day` | Tavily web search per (city, activity) → LLM name extraction across all candidates | Step 1 — when activities requested |
+| **Vector RAG + KG enrichment** | `query_poi_context` | ChromaDB semantic search over Wikipedia chunks → KG city/region/nearby augment | Step 3 — after `rate_pois` |
+| **Direct fetch** | inside `rate_pois` | Wikipedia API (parallel, cached) + TripAdvisor/LLM-synthetic ratings | Step 2 — enrichment, not RAG |
+
 ### Ratings Layer
 
 ```
-rate_pois tool
+rate_pois tool  (RATING_PROVIDER env var)
       │
-      ├─── TripAdvisorRatingProvider   (primary — key pending)
-      ├─── FoursquareRatingProvider    (secondary)
-      └─── LLMSyntheticRatingProvider  (active fallback — disk-cached, 21-day TTL)
+      ├─── TripAdvisorRatingProvider   (recommended — real reviews + photos, RATING_PROVIDER=tripadvisor)
+      ├─── TavilyEnrichmentProvider    (web-sourced enrichment, RATING_PROVIDER=tavily_enrichment)
+      ├─── FoursquareRatingProvider    (alternative, RATING_PROVIDER=foursquare)
+      └─── LLMSyntheticRatingProvider  (default fallback — disk-cached, 21-day TTL, no API key needed)
                 │
                 ▼
     composite_score = 0.4 × (rating/5) + 0.3 × log(reviews) + 0.3 × wikipedia_weight
@@ -86,11 +98,12 @@ rate_pois tool
 ```mermaid
 graph LR
     subgraph routeiq["routeiq/"]
-        AG["agent/\nday_trip_agent.py\nagent_state.py\ntools/ (5 tools)"]
-        RT["ratings/\nbase.py · factory.py\ntripadvisor · foursquare · llm_synthetic"]
+        AG["agent/\nday_trip_agent.py\nagent_state.py\ntools/ (7 tools)"]
+        AC["activities/\nActivityClassifier ABC\nosm_classifier · tavily_classifier\nranker · factory"]
+        RT["ratings/\nPOIRatingProvider ABC · factory\ntripadvisor · foursquare\nllm_synthetic · tavily_enrichment"]
         GR["graph/\ngraph_loader · route_graph\npoi_finder · knowledge_graph"]
-        RA["rag/\nwikipedia_fetcher · poi_indexer\nknowledge_rag · vector_baseline"]
-        RO["routing/\ndetour_scorer · poi_selector"]
+        RA["rag/\nwikipedia_fetcher · poi_indexer\npoi_chunker · knowledge_rag\nvector_baseline"]
+        RO["routing/\ndetour_scorer · poi_selector\nactivity_poi_selector"]
         IN["insights/\nquery_parser · narrative_chain\nprompts/ (versioned)"]
         UI["ui/\nmap_builder · card_renderer"]
         F["facade.py"]
@@ -103,7 +116,9 @@ graph LR
     PL --> RA
     PL --> RO
     PL --> IN
+    AG --> AC
     AG --> RT
+    AG --> RA
     AG --> GR
 ```
 
@@ -127,7 +142,7 @@ Results saved to `eval/results_week4.md`. Requires `NEBIUS_API_KEY` (and optiona
 
 **Results (15-query smoke test, all 5 configurations):**
 
-| Config | Pass Rate | Routing | Avg Recall | Avg Time |
+| Config | Pass Rate | Tool Routing | Avg Recall | Avg Time |
 |--------|-----------|---------|------------|----------|
 | Run 1 OSM + LLM-Synth | 13/15 | **15/15** | 83% | 66.0 s |
 | Run 2 Tavily + LLM-Synth | **15/15** | **15/15** | **100%** | 70.3 s |
@@ -136,7 +151,7 @@ Results saved to `eval/results_week4.md`. Requires `NEBIUS_API_KEY` (and optiona
 | Run 5 Tavily + TripAdvisor | **15/15** | **15/15** | 97% | 43.8 s |
 
 **Key findings:**
-- Routing 15/15 (100%) across every configuration — all 9 improvements holding
+- Tool routing 15/15 (100%) across every configuration — all 9 improvements holding
 - Tavily classifier +17% recall lift vs OSM (83% → 100%): finds parks as picnic via web content even without `leisure=picnic_site` OSM tags
 - **Recommended config:** Run 5 (Tavily + TripAdvisor) — 15/15, 97% recall, 43.8 s, 38% real photos, avg rating 4.49
 - **No-API-key fallback:** Run 1 (OSM + LLM-Synth) — 13/15, 83% recall, fully offline
@@ -147,6 +162,7 @@ Results saved to `eval/results_week4.md`. Requires `NEBIUS_API_KEY` (and optiona
 - Picnic gap: 0% recall in OSM configs, 100% in Tavily configs
 
 Tool routing eval: 8/8 (100%) — see `eval/results_tool_routing.md`.
+LLM-as-judge match quality (`avg_match_quality` 1–5): Track 1 activity stops rated by LLM on how well each stop suits the requested activity — see `eval/evaluators.py:score_activity_match_quality()`.
 
 ---
 
@@ -191,8 +207,8 @@ PASS threshold: `stops >= floor(hours/2)` (scales with budget — agent trims st
 | Pattern | Where |
 |---|---|
 | **Pipeline** | `DayTripAgent` ([routeiq/agent/day_trip_agent.py](routeiq/agent/day_trip_agent.py)) — LangGraph ReAct agent: plan → review (interrupt) → narrate. |
-| **Strategy** | `POIRatingProvider` ABC ([routeiq/ratings/base.py](routeiq/ratings/base.py)) — `TripAdvisorRatingProvider`, `FoursquareRatingProvider`, `LLMSyntheticRatingProvider` are interchangeable via `RATING_PROVIDER` env var. `DetourScorer` ([routeiq/routing/detour_scorer.py](routeiq/routing/detour_scorer.py)) — swappable scoring algorithm. |
-| **Factory** | `RatingsFactory` ([routeiq/ratings/factory.py](routeiq/ratings/factory.py)) — constructs the active rating provider from env var. |
+| **Strategy** | `POIRatingProvider` ABC ([routeiq/ratings/base.py](routeiq/ratings/base.py)) — `TripAdvisorRatingProvider`, `FoursquareRatingProvider`, `LLMSyntheticRatingProvider`, `TavilyEnrichmentProvider` are interchangeable via `RATING_PROVIDER` env var. `ActivityClassifier` ABC ([routeiq/activities/base.py](routeiq/activities/base.py)) — `OSMActivityClassifier` and `TavilyActivityClassifier` are interchangeable via `ACTIVITY_PROVIDER` env var. `DetourScorer` ([routeiq/routing/detour_scorer.py](routeiq/routing/detour_scorer.py)) — swappable scoring algorithm. |
+| **Factory** | `RatingsFactory` ([routeiq/ratings/factory.py](routeiq/ratings/factory.py)) — constructs the active rating provider from env var. `ActivityClassifierFactory` ([routeiq/activities/factory.py](routeiq/activities/factory.py)) — constructs the active activity classifier from env var. |
 | **Facade** | `RouteIQFacade` ([routeiq/facade.py](routeiq/facade.py)) — single entry point for the Route Planner tab; see [docs/README-routeplanner.md](docs/README-routeplanner.md). |
 | **Registry** | `RouteKnowledgeGraph` ([routeiq/graph/knowledge_graph.py](routeiq/graph/knowledge_graph.py)) — typed node/edge graph of POI, City, Region, Category with LOCATED\_IN / HAS\_CATEGORY / NEAR\_POI edges. `get_kg()` singleton ensures all callers share one in-memory graph. |
 | **Builder** | `MapBuilder` ([routeiq/ui/map_builder.py](routeiq/ui/map_builder.py)) — assembles Folium map with AntPath route, numbered markers, and stop popups. |
@@ -213,6 +229,7 @@ python3 -m pytest tests/ -v
 | Day Trip Agent — scheduling, budget trimming, ReAct loop | `tests/agent/test_day_trip_agent.py` |
 | Agent tools — find POIs, rate, enrich, search by name | `tests/agent/test_tools.py` |
 | Activity classifier — OSM + Tavily, ranker, factory | `tests/test_activity_poi_selector.py` |
+| `query_poi_context` tool — chunk+index + KnowledgeRAG integration | `tests/test_knowledge_rag.py` (existing KnowledgeRAG coverage) |
 | Tool routing eval — score_tool_routing() | `tests/test_tool_routing_eval.py` |
 | Ratings — TripAdvisor, Foursquare, LLM synthetic, factory | `tests/ratings/` (4 files) |
 | Graph loading + pickle cache | `test_graph_loader.py` |
@@ -244,6 +261,7 @@ routeiq/
       estimate_visit.py       READ: typical visit duration by OSM subtype
       search_poi_by_name.py   READ: Nominatim geocoder — resolves named places to lat/lon
       select_pois_for_day.py  READ: activity-based POI selection via two-track merge
+      query_poi_context.py    READ: chunk+index Wikipedia descriptions → KnowledgeRAG semantic retrieval + KG enrichment
       get_travel_time.py      READ: A* road-time between two lat/lon points
   ratings/
     base.py                   POIRatingProvider ABC + RatedPOI dataclass
@@ -251,6 +269,7 @@ routeiq/
     llm_synthetic.py          LLM-generated ratings, disk-cached per city, 21-day TTL
     tripadvisor.py            TripAdvisor Terra API adapter
     foursquare.py             Foursquare v2 adapter
+    tavily_enrichment.py      Tavily-based enrichment provider (RATING_PROVIDER=tavily_enrichment)
   graph/
     knowledge_graph.py        nx.DiGraph of POI/City/Region/Category; get_kg() singleton
     knowledge_graph_data.py   Bay Area seed data

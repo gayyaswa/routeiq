@@ -35,6 +35,7 @@ _TOOL_TO_STEP: dict[str, str] = {
     "estimate_visit_duration": "find_pois",
     "search_poi_by_name": "find_pois",
     "rate_pois": "rate_pois",
+    "query_poi_context": "rag",
 }
 
 
