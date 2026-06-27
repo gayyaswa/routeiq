@@ -75,13 +75,13 @@
     <th>Tool</th>
     <th>What it does</th>
   </tr>
-  <tr><td><code>find_city_pois</code></td><td>KnowledgeGraph lookup — instant, no network call</td></tr>
-  <tr><td><code>rate_pois</code></td><td>TripAdvisor or LLM-synthetic rating per POI</td></tr>
-  <tr><td><code>select_pois_for_day</code></td><td>Activity-matched + scenic fill merge</td></tr>
-  <tr><td><code>get_travel_time</code></td><td>OSMnx A* routing between stops</td></tr>
-  <tr><td><code>fetch_wikipedia</code></td><td>Description + thumbnail image per POI</td></tr>
-  <tr><td><code>search_pois_semantic</code></td><td>ChromaDB vector retrieval</td></tr>
-  <tr><td><code>classify_activities</code></td><td>OSM or Tavily activity classifier</td></tr>
+  <tr><td><code>find_city_pois</code></td><td>KnowledgeGraph lookup — returns up to 100 POIs for a city by OSM category; instant, no network call</td></tr>
+  <tr><td><code>select_pois_for_day</code></td><td>Activity-matched + scenic fill merge — two-track selection when the user specifies activities (hiking, kids, etc.)</td></tr>
+  <tr><td><code>rate_pois</code></td><td>TripAdvisor or LLM-synthetic rating per POI; fetches Wikipedia description + composite scoring (rating × review count × Wikipedia weight)</td></tr>
+  <tr><td><code>query_poi_context</code></td><td>Indexes rated POIs into ChromaDB, then retrieves KG-enriched context (semantic match score + city/region + NEAR_POI edges) for grounded narrative generation</td></tr>
+  <tr><td><code>enrich_poi_details</code></td><td>Fetches Wikipedia description + thumbnail image URL for a specific named POI — used during refinement or when rate_pois cache misses</td></tr>
+  <tr><td><code>estimate_visit_duration</code></td><td>Returns typical visit time in minutes by OSM category + subtype (e.g. museum → 90 min, viewpoint → 30 min)</td></tr>
+  <tr><td><code>search_poi_by_name</code></td><td>Nominatim geocoding — resolves a user-named landmark ("add Lombard Street") to a POI dict during itinerary refinement</td></tr>
 </table>
 
 <!-- ── 4. Autonomy vs Workflow ── -->
@@ -146,7 +146,7 @@
 <p><strong>Recommended config: Run 5 (Tavily + TripAdvisor)</strong> — best recall (97%) at competitive latency (43.8s).</p>
 
 <!-- ── Roadmap ── -->
-<h2>Roadmap — Multi-Agent Expansion</h2>
+<h2>Week 5–7 Roadmap — Multi-Agent Expansion</h2>
 <pre>OrchestratorAgent
 ├── DayTripAgent     (existing)  → itinerary + POIs
 ├── RestaurantAgent  (new)       → meal stops near each POI
