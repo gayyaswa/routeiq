@@ -1,0 +1,567 @@
+{
+  "name": "Social Media Post Generation Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\"post_content\": \"Full LinkedIn post text content - the viral post copy\"}"
+      },
+      "id": "0f4e3e11-4964-4c61-aa11-6fbcd31512fe",
+      "name": "Structured Output Parser1",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "position": [
+        1312,
+        544
+      ],
+      "typeVersion": 1.2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Keep only rows that still need generated content, and attach a stable merge key.\n// Test_ID may be blank/null in the uploaded sheet, so do not rely on it.\nreturn $input.all()\n  .map((item, index) => {\n    const row = item.json;\n    const testId = String(row.Test_ID ?? row.TEST_ID ?? row.Post_ID ?? row.ID ?? '').trim();\n    const userInput = String(row.User_Input ?? row.USER_INPUT ?? row.Topic ?? row.topic ?? '').trim();\n    return {\n      json: {\n        ...row,\n        __row_index: index,\n        __merge_key: testId || userInput || String(index),\n      },\n    };\n  })\n  .filter(item => {\n    const existing = item.json.Model_Output;\n    return existing === undefined || existing === null || String(existing).trim() === '';\n  });"
+      },
+      "id": "47f0e1c3-5101-49a3-bb0a-45593b3ea3e4",
+      "name": "Join Ideas1",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        736,
+        512
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('Loop Over All Rows').item.json.User_Input }}\n\n{% if $json.critic_feedback %}CRITIC FEEDBACK - YOU MUST ADDRESS THESE ISSUES:\n{{ $json.critic_feedback }}\n\nPREVIOUS VERSION:\n{{ $json.previous_output }}{% endif %}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "CRITICAL: JSON OUTPUT FORMAT COMPLIANCE\n\n⚠️ YOU MUST RETURN VALID JSON MATCHING THE EXACT SCHEMA PROVIDED BY THE STRUCTURED OUTPUT PARSER.\n\n⚠️ DO NOT include any text, explanations, or commentary outside the JSON structure.\n\n⚠️ DO NOT wrap the JSON in markdown code blocks or any other formatting.\n\n⚠️ ENSURE all required fields are present: post_content\n\nREFINEMENT PROTOCOL\n\nIf you receive critic feedback in the prompt context, you MUST address all mandatory corrections.\n\nMaintain the core idea but fix the specific issues identified.\n\nEnsure the revised post still follows all brand guidelines and content principles.\n\nMANDATORY WRITING RULES\n\n⚠️ CRITICAL: NO FIRST PERSON ALLOWED\n\nNEVER use: I, me, my, mine, we, our, us, ours\n\nALWAYS use: you, your (second person) or third person perspective\n\nWrite as if advising the reader directly or discussing concepts objectively\n\nExample WRONG: 'We teach RAG systems' or 'I found this bug'\n\nExample RIGHT: 'RAG systems fail when...' or 'Engineers often miss this bug'\n\n⚠️ LINKEDIN PROFESSIONAL STANDARDS\n\nContent must be appropriate for professional networking platform\n\nAvoid controversial, political, or divisive topics\n\nMaintain respectful, inclusive language\n\nFocus on engineering, data science, and technical leadership\n\nNo profanity, offensive content, or inappropriate humor\n\nROLE:\n\nYou are a world-class Technical Content Strategist for The Gen Academy, a premier education company helping engineering teams build reliable, production-grade AI systems.\n\nOBJECTIVE:\n\nYour mission is to create high-performing LinkedIn content packages that:\n\nEstablish authority in AI Evaluation (Evals), RAG Pipelines, and LLM Ops.\n\nSpark interest in technical workshops and courses.\n\nDeliver high-signal value to AI Engineers, CTOs, and Product Managers.\n\nShift the narrative from \"building cool demos\" to \"shipping reliable software.\"\n\nABOUT THE GEN ACADEMY:\n\nThe Gen Academy focuses on the \"hard engineering\" of Generative AI. They don't just teach prompts; they teach architecture and reliability.\n\nCore Topics & Offerings:\n\nAI Evals: Moving from \"vibes-based\" testing to rigorous, metric-driven evaluation loops.\n\nRAG Systems: Optimizing retrieval, grounding, and reducing hallucinations in production.\n\nLLM-as-a-Judge: Building automated evaluation pipelines using LLMs to score other LLMs.\n\nAgentic Workflows: Testing and debugging autonomous AI agents.\n\nAudience:\n\nAI Engineers, Data Scientists, Software Architects, CTOs, and Technical Product Managers.\n\nTone:\n\nRigorous, Engineering-First, No-Fluff. Feels like Andrej Karpathy meets a Senior Staff Engineer—deeply technical but clear and actionable.\n\nCONTENT BUCKETS:\n\n1. The Engineering Mindset (Principles)\n\nShare a principle-driven post about the philosophy of building reliable AI.\n\nThemes: \"Vibes are not metrics,\" \"Test-Driven Development for AI,\" \"The cost of hallucinations,\" or \"Determinism in a stochastic world.\"\n\nGoal: Challenge the reader to stop treating AI like magic and start treating it like software.\n\n2. Technical Deep Dive (Tactical)\n\nTeach a specific technical concept or workflow that solves a pain point.\n\nExamples: How to measure RAG retrieval recall, setting up a \"Golden Dataset,\" configuring an LLM-as-a-Judge prompt, or debugging a failed agent trace.\n\nGoal: Give the reader an \"Aha!\" moment that solves a bug they are facing right now.\n\nCONTENT FORMAT REQUIREMENTS\n\n1. POST_TEXT (The LinkedIn Post)\n\nScroll-stopping technical hook (e.g., \"Your RAG system isn't hallucinating; it's retrieving wrong.\")\n\nHigh density of information; respect the reader's intelligence.\n\nTied to reliability, evaluation, or system architecture.\n\nUse spacing for readability but avoid \"broetry\" (keep it professional).\n\nOUTPUT REQUIREMENTS\n\nYou MUST output:\n\npost_content: The full LinkedIn post text. This will be stored in the Model_Output column of the CSV file.\n\nFINAL REMINDER\n\nReturn ONLY valid JSON. No additional text. No markdown formatting. Just pure JSON matching the schema."
+        }
+      },
+      "id": "e45f7e48-0a8c-4042-b3d2-45726626b2ee",
+      "name": "LinkedIn Creator Agent1",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "position": [
+        1184,
+        304
+      ],
+      "retryOnFail": true,
+      "typeVersion": 1.7
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Evaluate this LinkedIn post:\n\n**Post Content:**\n{{ ($('LinkedIn Creator Agent1').item.json.output && $('LinkedIn Creator Agent1').item.json.output.post_content) || ($('LinkedIn Creator Agent1').item.json.output && $('LinkedIn Creator Agent1').item.json.output.output && $('LinkedIn Creator Agent1').item.json.output.output.post_content) || $('LinkedIn Creator Agent1').item.json.post_content || $('LinkedIn Creator Agent1').item.json.text || '' }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "### ROLE\nYou are the \"Content Quality Auditor\" for The Gen Academy's LinkedIn content. Your mission is to conduct a critical review of the proposed LinkedIn post.\n\n### CRITICAL AUDIT PARAMETERS\n1. BRAND ALIGNMENT: Does the post align with The Gen Academy's voice (inspiring, clear, valuable - like a mentor who genuinely cares)?\n2. VALUE CHECK: Does it deliver real, actionable insight or just surface-level advice?\n3. ENGAGEMENT CHECK: Is the hook strong enough to stop scrolling? Is the pacing good?\n4. EDUCATIONAL IMPACT: Does it showcase expertise in learning and development without being preachy?\n5. AUDIENCE FIT: Will students, young professionals, educators, and lifelong learners find this valuable?\n\n### EVALUATION CRITERIA\n- PASS: The post content is on-brand, valuable, engaging, and strategically sound.\n- FAIL: Significant issues with voice, value delivery, hook strength, or strategic positioning.\n- FIRST PERSON CHECK: Verify no first person language (I, me, my, we, our, us) is used in the post\n- LINKEDIN APPROPRIATENESS: Confirm content is professional and suitable for LinkedIn audience\n\n### OUTPUT REQUIREMENTS (STRICT JSON)\nYou must return a JSON object with this exact structure:\n{\n  \"status\": \"PASS or FAIL\",\n  \"quality_score\": (0-100 based on overall quality),\n  \"audit_report\": \"A brief summary of your findings covering post content quality\",\n  \"mandatory_corrections\": [\n    {\n      \"issue\": \"Specific description of the problem\",\n      \"fix\": \"Specific instruction for improvement\"\n    }\n  ]\n}"
+        }
+      },
+      "id": "d5fbbbe8-b525-46c7-9f8d-aca7e2327e6d",
+      "name": "LinkedIn Critic Agent1",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1536,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "id-1",
+              "leftValue": "={{ $json.output.status }}",
+              "rightValue": "FAIL",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "id-2",
+              "leftValue": "={{ $runIndex }}",
+              "rightValue": 1,
+              "operator": {
+                "type": "number",
+                "operation": "lte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "79bbe7a3-b9a0-4510-b792-695aa0c25725",
+      "name": "Check Critic Feedback1",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1888,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "User_Input",
+              "value": "={{ $('Loop Over All Rows').item.json.User_Input }}",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "previous_output",
+              "value": "={{ ($('LinkedIn Creator Agent1').item.json.output && $('LinkedIn Creator Agent1').item.json.output.post_content) || ($('LinkedIn Creator Agent1').item.json.output && $('LinkedIn Creator Agent1').item.json.output.output && $('LinkedIn Creator Agent1').item.json.output.output.post_content) || $('LinkedIn Creator Agent1').item.json.post_content || $('LinkedIn Creator Agent1').item.json.text || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "id-3",
+              "name": "critic_feedback",
+              "value": "={{ JSON.stringify($('LinkedIn Critic Agent1').item.json.output || $('LinkedIn Critic Agent1').item.json) }}",
+              "type": "string"
+            },
+            {
+              "id": "id-4",
+              "name": "Test_ID",
+              "value": "={{ $('Loop Over All Rows').item.json.Test_ID }}",
+              "type": "string"
+            },
+            {
+              "id": "id-quality-gate-attempt",
+              "name": "quality_gate_attempt",
+              "value": "={{ $runIndex + 1 }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "77e0d1bb-1b2d-4974-aa28-87de1d49963f",
+      "name": "Prepare Revision Context",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2112,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"status\": \"PASS or FAIL\",\n  \"quality_score\": 85,\n  \"audit_report\": \"Brief summary of findings\",\n  \"mandatory_corrections\": [\n    {\n      \"issue\": \"Specific problem description\",\n      \"fix\": \"Specific improvement instruction\"\n    }\n  ]\n}"
+      },
+      "id": "c98e605f-f146-4d43-a8ce-f747775c3665",
+      "name": "Critic Output Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        1680,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "id": "f686d809-789a-496a-a6eb-beaadb013f9f",
+      "name": "Collect All Processed Rows",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        2112,
+        704
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "reset": false
+        }
+      },
+      "id": "a6aa32e4-ad67-481e-bc59-465903c7c769",
+      "name": "Loop Over All Rows",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        960,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "Test_ID",
+              "value": "={{ $('Loop Over All Rows').item.json.Test_ID || $('Loop Over All Rows').item.json.TEST_ID || $('Loop Over All Rows').item.json.Post_ID || $('Loop Over All Rows').item.json.ID || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "User_Input",
+              "value": "={{ $('Loop Over All Rows').item.json.User_Input || $('Loop Over All Rows').item.json.USER_INPUT || $('Loop Over All Rows').item.json.Topic || $('Loop Over All Rows').item.json.topic || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "id-3",
+              "name": "Model_Output",
+              "value": "={{ ($('LinkedIn Creator Agent1').item.json.output && $('LinkedIn Creator Agent1').item.json.output.post_content) || ($('LinkedIn Creator Agent1').item.json.output && $('LinkedIn Creator Agent1').item.json.output.output && $('LinkedIn Creator Agent1').item.json.output.output.post_content) || $('LinkedIn Creator Agent1').item.json.post_content || $('LinkedIn Creator Agent1').item.json.text || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "id---row-index",
+              "name": "__row_index",
+              "value": "={{ $('Loop Over All Rows').item.json.__row_index }}",
+              "type": "number"
+            },
+            {
+              "id": "id---merge-key",
+              "name": "__merge_key",
+              "value": "={{ $('Loop Over All Rows').item.json.__merge_key }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "5fd0a583-bffe-41a9-986f-9132e763f53b",
+      "name": "Prepare Final Row Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2112,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "formTitle": "Upload LinkedIn Post Ideas CSV",
+        "formDescription": "Upload a CSV file containing your LinkedIn post topics. The file will be processed and returned with generated content.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "CSV File",
+              "fieldType": "file",
+              "fieldName": "csv_file",
+              "multipleFiles": false,
+              "acceptFileTypes": ".csv",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "f340f826-85fb-47e3-a7a6-aee31b83f822",
+      "name": "Upload Excel Form",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.5,
+      "position": [
+        288,
+        512
+      ],
+      "webhookId": "1a5a9101-c8b5-4fc8-a080-1b16ddcecd1b"
+    },
+    {
+      "parameters": {
+        "binaryPropertyName": "csv_file",
+        "options": {
+          "includeEmptyCells": false
+        }
+      },
+      "id": "c867d6d4-9d3b-4b80-b9d1-ee591464307e",
+      "name": "Extract First Sheet Data",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        512,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "fileName": "linkedin_posts_output.csv",
+          "headerRow": true
+        }
+      },
+      "id": "f9c76418-649c-42a6-927d-08fb987262f9",
+      "name": "Convert to Excel",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        2560,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build the output file after the row loop has completed.\n// Test_ID can be null, so merge by stable row key first, then Test_ID, then User_Input.\nconst incomingItems = $input.all();\n\nfunction flattenProcessedItems(items) {\n  const rows = [];\n  for (const item of items) {\n    if (Array.isArray(item.json?.data)) {\n      for (const nested of item.json.data) rows.push({ json: nested });\n    } else {\n      rows.push(item);\n    }\n  }\n  return rows;\n}\n\nfunction normalize(value) {\n  return String(value ?? '').trim();\n}\n\nfunction getTestId(row) {\n  return normalize(row?.Test_ID ?? row?.TEST_ID ?? row?.Post_ID ?? row?.ID);\n}\n\nfunction getUserInput(row) {\n  return normalize(row?.User_Input ?? row?.USER_INPUT ?? row?.Topic ?? row?.topic);\n}\n\nfunction getRowIndex(row) {\n  const raw = row?.__row_index;\n  return raw === undefined || raw === null || raw === '' ? '' : String(raw);\n}\n\nfunction getMergeKey(row, index) {\n  return normalize(row?.__merge_key) || getTestId(row) || getUserInput(row) || String(index);\n}\n\nfunction getModelOutput(row) {\n  const value =\n    row?.Model_Output ??\n    row?.model_output ??\n    row?.post_content ??\n    row?.output?.post_content ??\n    row?.output?.output?.post_content ??\n    '';\n  return typeof value === 'string' ? value.trim() : String(value ?? '').trim();\n}\n\nconst byMergeKey = new Map();\nconst byTestId = new Map();\nconst byUserInput = new Map();\nconst byRowIndex = new Map();\n\nfor (const item of flattenProcessedItems(incomingItems)) {\n  const row = item.json;\n  const output = getModelOutput(row);\n  if (!output) continue;\n\n  const mergeKey = getMergeKey(row);\n  const testId = getTestId(row);\n  const userInput = getUserInput(row);\n  const rowIndex = getRowIndex(row);\n\n  if (mergeKey) byMergeKey.set(mergeKey, output);\n  if (testId) byTestId.set(testId, output);\n  if (userInput) byUserInput.set(userInput, output);\n  if (rowIndex) byRowIndex.set(rowIndex, output);\n}\n\nconst originalRows = $('Extract First Sheet Data').all();\n\nreturn originalRows.map((row, index) => {\n  const original = row.json;\n  const mergeKey = getMergeKey(original, index);\n  const testId = getTestId(original);\n  const userInput = getUserInput(original);\n  const rowIndex = String(index);\n\n  const generatedOutput =\n    byMergeKey.get(mergeKey) ??\n    byTestId.get(testId) ??\n    byUserInput.get(userInput) ??\n    byRowIndex.get(rowIndex);\n\n  const { __row_index, __merge_key, ...cleanOriginal } = original;\n  return {\n    json: {\n      ...cleanOriginal,\n      Model_Output: generatedOutput ?? original.Model_Output ?? '',\n    },\n  };\n});"
+      },
+      "id": "2f1bfe77-8bf8-473a-9fdf-2c8b6f2919ff",
+      "name": "Prepare Excel Output Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2336,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-5.5-pro",
+          "mode": "list",
+          "cachedResultName": "gpt-5.5-pro"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1088,
+        560
+      ],
+      "id": "d878e16a-9c9d-440d-90a8-64dfd06b7c4e",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "MaRGQlS2Gn1mnXtF",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1440,
+        512
+      ],
+      "id": "5cddb6d7-ad7f-450c-b43e-839162905ca4",
+      "name": "OpenAI Chat Model1",
+      "credentials": {
+        "openAiApi": {
+          "id": "MaRGQlS2Gn1mnXtF",
+          "name": "OpenAI account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Structured Output Parser1": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "LinkedIn Creator Agent1",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Join Ideas1": {
+      "main": [
+        [
+          {
+            "node": "Loop Over All Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LinkedIn Creator Agent1": {
+      "main": [
+        [
+          {
+            "node": "LinkedIn Critic Agent1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LinkedIn Critic Agent1": {
+      "main": [
+        [
+          {
+            "node": "Check Critic Feedback1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Critic Feedback1": {
+      "main": [
+        [
+          {
+            "node": "Prepare Revision Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Final Row Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Revision Context": {
+      "main": [
+        [
+          {
+            "node": "LinkedIn Creator Agent1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Critic Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "LinkedIn Critic Agent1",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over All Rows": {
+      "main": [
+        [
+          {
+            "node": "Collect All Processed Rows",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "LinkedIn Creator Agent1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect All Processed Rows": {
+      "main": [
+        [
+          {
+            "node": "Prepare Excel Output Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Final Row Data": {
+      "main": [
+        [
+          {
+            "node": "Loop Over All Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload Excel Form": {
+      "main": [
+        [
+          {
+            "node": "Extract First Sheet Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract First Sheet Data": {
+      "main": [
+        [
+          {
+            "node": "Join Ideas1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Excel Output Data": {
+      "main": [
+        [
+          {
+            "node": "Convert to Excel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "LinkedIn Creator Agent1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "LinkedIn Critic Agent1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "36afa861-2820-4468-9bcc-7dcc349fdab3",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "6423b73c2290e6d93044aba16ef82f48f826f40959ba0ae75b4b31be6f060234"
+  },
+  "id": "VEot0sDcvO5xabhq",
+  "tags": []
+}

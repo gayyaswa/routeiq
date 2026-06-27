@@ -102,6 +102,12 @@ User
   │  enrich_batch on all 5 selected POIs
   │  → cache check → API call if miss → ratings, photos, snippets
   ▼
+[query_poi_context]
+  │  preferences = ["hiking", "kids"]
+  │  Indexes Wikipedia descriptions → ChromaDB (local, no network)
+  │  Retrieves per POI: semantic match score, Wikipedia evidence,
+  │                     city/region (KG LOCATED_IN), nearby POIs (NEAR_POI)
+  ▼
 [Narrate Node]
   │  Lands End:             "We picked this for your hiking — [rating 4.7]"
   │  Children's Playground: "Perfect for kids — [rating 4.3]"
@@ -150,11 +156,6 @@ User
   │    → CACHE MISS: 1 Tavily call → cache written
   │    → tagged: Academy of Sciences ✓, Golden Gate Park ✓,
   │              Children's Playground ✓, Exploratorium ✓
-  ▼
-[PerplexityActivityClassifier]  (cross-validates Tavily — 1 query/city)
-  │  → CACHE MISS: 1 Perplexity call → cache written
-  │  → confirms: Lands End (hiking), Academy of Sciences (kids)
-  │  → adds: Exploratorium (kids) — Tavily missed it on first search
   ▼
 [ActivityRanker — SemanticRanker]
   │  user_context = "scenic coastal hiking" → adjectives detected → SemanticRanker
@@ -210,6 +211,24 @@ User
   │  LLMSyntheticRatingProvider runs as fallback for any POI Tavily didn't cover
   │  (Baker Beach, Crissy Field, Golden Gate Park — rare, Tavily usually covers all)
   ▼
+[query_poi_context]
+  │  preferences = ["hiking", "kids"]
+  │  Indexes Wikipedia descriptions for all 5 POIs → ChromaDB (local, no API call)
+  │  Retrieves per POI: semantic match score, Wikipedia evidence,
+  │                     city/region (KG LOCATED_IN), nearby POIs (KG NEAR_POI)
+  │
+  │  Lands End:
+  │    match_score     : 0.91  (strong match to "hiking")
+  │    wikipedia_chunk : "rugged 3.5-mile coastal trail with views of the Golden Gate"
+  │    region          : "Marin Headlands area"
+  │    nearby          : ["Baker Beach (0.8 mi)", "Lincoln Park (0.4 mi)"]
+  │
+  │  Academy of Sciences:
+  │    match_score     : 0.84  (strong match to "kids")
+  │    wikipedia_chunk : "natural history museum with a planetarium, aquarium, and living roof"
+  │    region          : "Golden Gate Park"
+  │    nearby          : ["de Young Museum (0.1 mi)", "Japanese Tea Garden (0.2 mi)"]
+  ▼
 [Narrate Node]
   │
   │  Lands End (Track 1, hiking — grounded in classifier + Tavily enrichment):
@@ -244,8 +263,8 @@ Evaluation result:
   vs. Flow 2 (OSM):  Academy of Sciences was missed; Lands End not ranked by description fit
 ```
 
-**API calls — first run:** 2 Tavily classify + 1 Perplexity + 1 Tavily enrich = 4 total
-**API calls — repeat (same city + activities):** 0 (all 4 results cached 21 days)
+**API calls — first run:** 2 Tavily classify + 1 Tavily enrich = 3 total
+**API calls — repeat (same city + activities):** 0 (all 3 results cached 21 days)
 
 ---
 
@@ -291,7 +310,6 @@ Evaluation result:
 |---|---|---|---|
 | OSM POIs for city | `cache/pois_*.json.gz` | Forever (OSM is stable) | bbox coordinates |
 | Tavily activity results | `cache/tavily_{city}_{activity}.json` | 21 days | city + activity |
-| Perplexity synthesis | `cache/perplexity_{city}_{activities}.json` | 21 days | city + sorted activities |
 | TripAdvisor pool | `cache/ratings/tripadvisor_{city}_pool.json` | 21 days | city |
 | TripAdvisor reviews | `cache/ratings/tripadvisor_review_{id}.json` | 21 days | location_id |
 | LLM synthetic ratings | `cache/ratings/llm_synthetic_*.json` | Forever | poi id |
@@ -308,20 +326,15 @@ OSM classifier alone
   → catches POIs with explicit activity tags (leisure=cycling_path, amenity=playground)
   → misses: Academy of Sciences for kids, Crissy Field for hiking (no matching OSM tag)
   → false negative rate: high for activity-tagged POIs with generic OSM categories
+  → zero API cost; good as a baseline and fallback
 
 + Tavily
   → adds web evidence: "hiking in San Francisco" returns Crissy Field, Marin Headlands
   → catches POIs missed by OSM tags
   → bulk: 1 search per activity per city, not per POI
   → false positive risk: nearby POI names can appear in unrelated search results
-
-+ Perplexity
-  → synthesizes + cites: confirms Tavily hits, adds citation sources
-  → best for authoritative classification on disputed cases
-  → 1 query covers all activities for the city
-  → can cross-validate against Tavily (disagreement = lower confidence)
+  → 1000 free searches/month; 21-day cache means repeat runs cost nothing
 ```
 
-The three classifiers are complementary. For evaluation, run all three independently
-on the same 30 golden cases and compare precision/recall — that tells you exactly what
-each provider adds.
+For evaluation, run both classifiers independently on the same golden cases and compare
+precision/recall — that tells you exactly what Tavily adds over the free OSM baseline.

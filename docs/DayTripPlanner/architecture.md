@@ -113,15 +113,17 @@ narrate → END
 
 ---
 
-## The 5 Agent Tools
+## The 7 Agent Tools
 
 | Tool | What it does | Data source |
 |---|---|---|
 | `find_city_pois(city, categories)` | KG city lookup → returns ALL OSM POIs (instant, no network) | OSM via `RouteKnowledgeGraph` |
-| `rate_pois(city, poi_list_json)` | Enriches OSM POIs with ratings + reviews + photos; filters low-quality; composite score | TripAdvisor or Foursquare (via `RatingsFactory`) |
-| `enrich_poi_details(poi_name, city)` | Wikipedia factual description + thumbnail image | Wikipedia only |
+| `select_pois_for_day(city, activities, ...)` | Two-track merge: activity-matched slots + scenic fills | `ActivityClassifier` + KG |
+| `rate_pois(city, poi_list_json)` | Enriches OSM POIs with ratings + reviews + photos; composite score | TripAdvisor / LLM-synthetic (via `RatingsFactory`) |
+| `query_poi_context(preferences, rated_pois_json)` | Indexes Wikipedia descriptions → ChromaDB; retrieves KG-enriched context per POI | ChromaDB (local) + KG |
+| `enrich_poi_details(poi_name, city)` | Wikipedia factual description + thumbnail image for a named POI | Wikipedia |
 | `estimate_visit_duration(category, subtype)` | Heuristic minutes per stop type | Built-in lookup table |
-| `get_travel_time(lat1, lon1, lat2, lon2)` | Drive time estimate between stops | Haversine → 30 km/h urban |
+| `search_poi_by_name(name, city)` | Nominatim geocoding — resolves user-named landmarks during refinement | OpenStreetMap Nominatim |
 
 ### find_city_pois — KG-first, geographic completeness
 
@@ -322,10 +324,9 @@ Plan time: ~56s → ~36s total react time for SF swimming.
 
 | Provider | `RATING_PROVIDER` | What it returns |
 |---|---|---|
+| `LLMSyntheticRatingProvider` | `llm_synthetic` | Synthetic ratings from Wikipedia description — default, no key needed |
 | `TripAdvisorRatingProvider` | `tripadvisor` | Real ratings, up to 5 photos, 3 review snippets |
-| `LLMSyntheticRatingProvider` | `llm_synthetic` | Plausible synthetic ratings from Wikipedia description |
 | `TavilyEnrichmentProvider` | `tavily_enrichment` | Web-searched ratings + snippets (no TA key required) |
-| `FoursquareRatingProvider` | `foursquare` | Tips, hours, 0–10 rating normalized to 0–5 |
 | `NullRatingProvider` | (fallback) | Empty enrichment — agent works with no keys |
 
 ### New package — routeiq/activities/
