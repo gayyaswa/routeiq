@@ -378,7 +378,7 @@ def _plan(state: DayTripState, config: Optional[RunnableConfig] = None) -> dict:
     # Phase 1 — ReAct loop: execute tools until the LLM stops calling them
     from routeiq.timing import log as _tlog, clear as _tclear
     _tclear()
-    max_iterations = 12
+    max_iterations = 6
     _iter_t0 = time.perf_counter()
     for iteration in range(max_iterations):
         _llm_t0 = time.perf_counter()
