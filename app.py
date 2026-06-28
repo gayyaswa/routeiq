@@ -687,6 +687,7 @@ with tab1:
             "activities": final_activities,
             "user_context": dt_user_context.strip(),
             "activity_fallback_note": None,
+            "poi_cache": {},
         }
         config = {"configurable": {"thread_id": new_thread_id}}
         thread = threading.Thread(

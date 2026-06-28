@@ -1,15 +1,16 @@
-"""Tests for LLMSyntheticRatingProvider."""
+"""Tests for LLMSyntheticRatingProvider.
+
+Caching (file/ChromaDB) is tested separately in test_poi_rating_store.py.
+This module tests the LLM call, response parsing, and error handling only.
+"""
 import json
-import os
-import time
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from routeiq.graph.poi import POI
-from routeiq.ratings.llm_synthetic import LLMSyntheticRatingProvider, _CACHE_TTL_SECONDS
+from routeiq.ratings.llm_synthetic import LLMSyntheticRatingProvider
 
 _CITY = "San Francisco, CA"
-_SAFE_CITY = "san_francisco_ca"
 
 _POI_ALCATRAZ = POI(
     name="Alcatraz Island",
@@ -57,8 +58,8 @@ def _make_llm_response(data):
 
 
 @pytest.fixture
-def provider(tmp_path):
-    p = LLMSyntheticRatingProvider(cache_dir=str(tmp_path))
+def provider():
+    p = LLMSyntheticRatingProvider()
     mock_llm = MagicMock()
     mock_llm.invoke.return_value = _make_llm_response(_LLM_RESPONSE)
     p._llm = mock_llm
@@ -92,7 +93,7 @@ class TestEnrichBatch:
     def test_empty_input_returns_empty(self, provider):
         assert provider.enrich_batch(_CITY, []) == []
 
-    def test_unmatched_poi_gets_null_fields(self, provider, tmp_path):
+    def test_unmatched_poi_gets_null_fields(self, provider):
         unlisted = POI(name="Unknown Spot XYZ", category="tourism",
                        lat=0.0, lon=0.0, osm_id="way/999")
         rated = provider.enrich_batch(_CITY, [unlisted])
@@ -100,48 +101,16 @@ class TestEnrichBatch:
         assert rated[0].review_count is None
         assert rated[0].review_source == "AI Insights"
 
-
-class TestCaching:
-    def test_cache_written_on_first_call(self, provider, tmp_path):
+    def test_always_calls_llm_no_internal_cache(self, provider):
+        """LLMSyntheticRatingProvider is a pure fetch — caching is upstream."""
         provider.enrich_batch(_CITY, [_POI_ALCATRAZ])
-        cache_file = tmp_path / f"llm_synthetic_{_SAFE_CITY}.json"
-        assert cache_file.exists()
-
-    def test_cache_hit_skips_llm(self, provider, tmp_path):
-        # Pre-seed cache
-        cache_file = tmp_path / f"llm_synthetic_{_SAFE_CITY}.json"
-        cache_file.write_text(json.dumps(_LLM_RESPONSE))
-
         provider.enrich_batch(_CITY, [_POI_ALCATRAZ])
-        assert provider._llm.invoke.call_count == 0
-
-    def test_stale_cache_triggers_llm(self, provider, tmp_path):
-        cache_file = tmp_path / f"llm_synthetic_{_SAFE_CITY}.json"
-        cache_file.write_text(json.dumps(_LLM_RESPONSE))
-        old_mtime = time.time() - _CACHE_TTL_SECONDS - 1
-        os.utime(cache_file, (old_mtime, old_mtime))
-
-        provider.enrich_batch(_CITY, [_POI_ALCATRAZ])
-        assert provider._llm.invoke.call_count == 1
-
-    def test_missing_pois_added_to_existing_cache(self, provider, tmp_path):
-        # Seed cache with only Alcatraz
-        cache_file = tmp_path / f"llm_synthetic_{_SAFE_CITY}.json"
-        cache_file.write_text(json.dumps([_LLM_RESPONSE[0]]))
-
-        # Request both — Coit Tower is missing, should trigger LLM for it only
-        provider.enrich_batch(_CITY, [_POI_ALCATRAZ, _POI_COIT])
-        assert provider._llm.invoke.call_count == 1
-        # Both should now be in the cache
-        merged = json.loads(cache_file.read_text())
-        names = {item["name"] for item in merged}
-        assert "Alcatraz Island" in names
-        assert "Coit Tower" in names
+        assert provider._llm.invoke.call_count == 2
 
 
 class TestLLMFailure:
-    def test_llm_error_returns_null_fields(self, tmp_path):
-        provider = LLMSyntheticRatingProvider(cache_dir=str(tmp_path))
+    def test_llm_error_returns_null_fields(self):
+        provider = LLMSyntheticRatingProvider()
         mock_llm = MagicMock()
         mock_llm.invoke.side_effect = RuntimeError("LLM unavailable")
         provider._llm = mock_llm
@@ -150,8 +119,8 @@ class TestLLMFailure:
         assert len(rated) == 1
         assert rated[0].rating is None
 
-    def test_llm_invalid_json_returns_null_fields(self, tmp_path):
-        provider = LLMSyntheticRatingProvider(cache_dir=str(tmp_path))
+    def test_llm_invalid_json_returns_null_fields(self):
+        provider = LLMSyntheticRatingProvider()
         mock_llm = MagicMock()
         mock_llm.invoke.return_value = MagicMock(content="not valid json at all")
         provider._llm = mock_llm
@@ -159,8 +128,8 @@ class TestLLMFailure:
         rated = provider.enrich_batch(_CITY, [_POI_ALCATRAZ])
         assert rated[0].rating is None
 
-    def test_llm_markdown_fences_stripped(self, tmp_path):
-        provider = LLMSyntheticRatingProvider(cache_dir=str(tmp_path))
+    def test_llm_markdown_fences_stripped(self):
+        provider = LLMSyntheticRatingProvider()
         mock_llm = MagicMock()
         fenced = f"```json\n{json.dumps(_LLM_RESPONSE)}\n```"
         mock_llm.invoke.return_value = MagicMock(content=fenced)

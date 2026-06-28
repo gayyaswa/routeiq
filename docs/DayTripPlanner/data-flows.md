@@ -33,11 +33,11 @@ User
   │  top 5 by score → [Baker Beach, Lands End, Golden Gate Park,
   │                     Alcatraz, Fisherman's Wharf]
   ▼
-[Rating Provider]
-  │  RatingProvider.enrich_batch("San Francisco", [5 selected POIs])
-  │  → checks 21-day local cache first
-  │  → if cache miss: 1 API call to TripAdvisor / Foursquare
-  │  → adds rating, review_snippet, photos to each stop
+[rate_pois]
+  │  Layer 1: DayTripState.poi_cache dict — checked for each POI (in-memory, zero I/O)
+  │  Layer 2: ChromaDB poi_ratings — single batch get (21-day TTL, ~0.3s on hit)
+  │  Provider: TripAdvisor / Foursquare — only called on full miss
+  │  → adds rating, review_snippet, photos to each stop; writes results back to both layers
   ▼
 [Narrate Node]
   │  prompt: 5 stops, scenic quality descriptions only
@@ -46,7 +46,7 @@ User
 Day trip: 5 scenic stops, no activity badges
 ```
 
-**API calls this run:** 0 (KG in-memory) + 0 (classifier skipped) + 0–1 (rating cache)
+**API calls this run:** 0 (KG in-memory) + 0 (classifier skipped) + 0 if Layer 1/2 hit, 1 if cold
 **What the user sees:** same experience as before Week 4, no change
 
 ---
@@ -98,9 +98,11 @@ User
   │
   │  Ordered by geography for logical day flow.
   ▼
-[Rating Provider]
-  │  enrich_batch on all 5 selected POIs
-  │  → cache check → API call if miss → ratings, photos, snippets
+[rate_pois]
+  │  Layer 1: DayTripState.poi_cache dict — checked for all 5 POIs (in-memory, zero I/O)
+  │  Layer 2: ChromaDB poi_ratings — single batch get (21-day TTL, ~0.3s on hit)
+  │  Provider: TripAdvisor / Foursquare — only called on full miss
+  │  → ratings, photos, snippets; written back to both layers
   ▼
 [query_poi_context]
   │  preferences = ["hiking", "kids"]
@@ -123,7 +125,7 @@ Evaluation result:
   Limitation noted: Academy of Sciences missed (no OSM kids tag) — Tavily fixes this
 ```
 
-**API calls this run:** 0 (classifier) + 0–1 (rating cache)
+**API calls this run:** 0 (classifier) + 0 if Layer 1/2 hit, 1 if cold (provider rating)
 
 ---
 
@@ -189,27 +191,31 @@ User
   │    slot 4: Crissy Field        scenic_score 0.85  (hiking rank 3, good scenic fill)
   │    slot 5: Golden Gate Park    scenic_score 0.82
   ▼
-[TavilyEnrichmentProvider]  ← Tavily as rating/enrichment provider
+[rate_pois]
+  │  Layer 1: DayTripState.poi_cache dict — checked for all 5 POIs (in-memory, zero I/O)
+  │  Layer 2: ChromaDB poi_ratings — single batch get (21-day TTL, ~0.3s on hit)
+  │  On full miss → TavilyEnrichmentProvider:
   │
-  │  Bulk search: "visitor highlights reviews San Francisco attractions"
-  │    → CACHE MISS: 1 Tavily call → cache written
+  │    Bulk search: "visitor highlights reviews San Francisco attractions"
+  │      → CACHE MISS: 1 Tavily call → cache written
   │
-  │  LLM extraction per selected POI (~150 tokens each):
+  │    LLM extraction per selected POI (~150 tokens each):
   │
-  │    Lands End:
-  │      rating_hint  : "consistently 4.5–4.8 stars across review sites"
-  │      highlights   : ["dramatic bluff trail", "WWII ruins", "best at golden hour"]
-  │      visitor_quote: "one of the most underrated hikes in all of California"
-  │      photo_url    : "https://..."
+  │      Lands End:
+  │        rating_hint  : "consistently 4.5–4.8 stars across review sites"
+  │        highlights   : ["dramatic bluff trail", "WWII ruins", "best at golden hour"]
+  │        visitor_quote: "one of the most underrated hikes in all of California"
+  │        photo_url    : "https://..."
   │
-  │    Academy of Sciences:
-  │      rating_hint  : "top-rated family attraction in SF"
-  │      highlights   : ["planetarium shows", "living roof", "albino alligator"]
-  │      visitor_quote: "my kids didn't want to leave"
-  │      photo_url    : "https://..."
+  │      Academy of Sciences:
+  │        rating_hint  : "top-rated family attraction in SF"
+  │        highlights   : ["planetarium shows", "living roof", "albino alligator"]
+  │        visitor_quote: "my kids didn't want to leave"
+  │        photo_url    : "https://..."
   │
-  │  LLMSyntheticRatingProvider runs as fallback for any POI Tavily didn't cover
-  │  (Baker Beach, Crissy Field, Golden Gate Park — rare, Tavily usually covers all)
+  │    LLMSyntheticRatingProvider runs as fallback for any POI Tavily didn't cover
+  │    (Baker Beach, Crissy Field, Golden Gate Park — rare, Tavily usually covers all)
+  │  Results written to ChromaDB poi_ratings (Layer 2) then DayTripState.poi_cache (Layer 1)
   ▼
 [query_poi_context]
   │  preferences = ["hiking", "kids"]
@@ -265,6 +271,7 @@ Evaluation result:
 
 **API calls — first run:** 2 Tavily classify + 1 Tavily enrich = 3 total
 **API calls — repeat (same city + activities):** 0 (all 3 results cached 21 days)
+**API calls — same-session refinement:** 0 (rating Layer 1 state hit; classify already cached)
 
 ---
 
@@ -309,13 +316,19 @@ Evaluation result:
 | Data | Cache location | TTL | Key |
 |---|---|---|---|
 | OSM POIs for city | `cache/pois_*.json.gz` | Forever (OSM is stable) | bbox coordinates |
-| Tavily activity results | `cache/tavily_{city}_{activity}.json` | 21 days | city + activity |
+| Tavily activity results | `cache/activities/tavily_{city}_{activity}.json` | 21 days | city + activity |
 | TripAdvisor pool | `cache/ratings/tripadvisor_{city}_pool.json` | 21 days | city |
 | TripAdvisor reviews | `cache/ratings/tripadvisor_review_{id}.json` | 21 days | location_id |
-| LLM synthetic ratings | `cache/ratings/llm_synthetic_*.json` | Forever | poi id |
+| POI ratings — same session (Layer 1) | `DayTripState.poi_cache` (in-memory dict) | Session lifetime | `{city}:{poi_name}` |
+| POI ratings — cross-session (Layer 2) | ChromaDB `poi_ratings` collection | 21 days | `{city}:{poi_name}` |
+
+Layer 1 is checked first (zero I/O); Layer 2 on miss (single batch read ~0.3s); provider
+API only on full miss. All providers (TripAdvisor, Foursquare, LLM synthetic, Tavily enrich)
+write through both layers identically.
 
 On a repeat run of the same city + same activities: **0 API calls** from classifier,
 **0 API calls** from rating provider. Only the LLM narration call runs fresh.
+On a same-session refinement: **<0.1s** for rating (Layer 1 state hit).
 
 ---
 

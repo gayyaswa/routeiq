@@ -1,16 +1,11 @@
 from __future__ import annotations
 import json
-import os
-import time
 from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from routeiq.graph.poi import POI
 from routeiq.ratings.base import POIRatingProvider, RatedPOI
-
-_CACHE_DIR = "./cache/ratings"
-_CACHE_TTL_SECONDS = 21 * 86400
 
 _SYSTEM = """You are a travel data generator. Given a list of points of interest,
 produce realistic visitor ratings and review snippets that a traveler would write after visiting.
@@ -29,16 +24,21 @@ No markdown, no prose. Just the JSON array."""
 
 
 class LLMSyntheticRatingProvider(POIRatingProvider):
-    """Generates synthetic ratings and reviews via LLM when live APIs are unavailable (Strategy pattern)."""
+    """Generates synthetic ratings and reviews via LLM when live APIs are unavailable (Strategy pattern).
+
+    Caching is handled upstream by POIRatingStore (ChromaDB, 21-day TTL) and the
+    in-session poi_cache in DayTripState — this class is a pure fetch-and-return.
+    """
+
+    # 50 POIs × ~120 chars each ≈ 6K tokens per batch; single call for 900 POIs caused overflow.
+    _BATCH_SIZE = 50
 
     @property
     def source_name(self) -> str:
         return "AI Insights"
 
-    def __init__(self, cache_dir: str = _CACHE_DIR):
-        self._cache_dir = cache_dir
-        os.makedirs(cache_dir, exist_ok=True)
-        self._llm = None  # lazy-loaded to avoid import overhead when not used
+    def __init__(self) -> None:
+        self._llm = None  # lazy-loaded
 
     def _get_llm(self):
         if self._llm is None:
@@ -49,18 +49,14 @@ class LLMSyntheticRatingProvider(POIRatingProvider):
     def enrich_batch(self, city: str, pois: list[POI]) -> list[RatedPOI]:
         if not pois:
             return []
-
-        cache_path = self._cache_path(city)
-        pool = self._load_or_generate(city, pois, cache_path)
-
-        index: dict[str, dict[str, Any]] = {item["name"]: item for item in pool}
+        items = self._call_llm(city, pois)
+        index: dict[str, dict[str, Any]] = {item["name"]: item for item in items}
         results = []
         for poi in pois:
             match = index.get(poi.name)
             if match is None:
                 results.append(RatedPOI(poi=poi, review_source=self.source_name))
                 continue
-
             snippets = match.get("snippets") or []
             results.append(RatedPOI(
                 poi=poi,
@@ -72,36 +68,6 @@ class LLMSyntheticRatingProvider(POIRatingProvider):
                 hours=match.get("hours"),
             ))
         return results
-
-    def _load_or_generate(self, city: str, pois: list[POI], cache_path: str) -> list[dict[str, Any]]:
-        cutoff = time.time() - _CACHE_TTL_SECONDS
-        if os.path.exists(cache_path) and os.path.getmtime(cache_path) > cutoff:
-            try:
-                with open(cache_path) as f:
-                    cached: list[dict] = json.load(f)
-                cached_names = {item["name"] for item in cached}
-                missing = [p for p in pois if p.name not in cached_names]
-                if not missing:
-                    return cached
-                # Generate only the missing POIs and merge
-                new_items = self._call_llm(city, missing)
-                merged = cached + new_items
-                with open(cache_path, "w") as f:
-                    json.dump(merged, f)
-                return merged
-            except Exception:
-                pass
-
-        items = self._call_llm(city, pois)
-        try:
-            with open(cache_path, "w") as f:
-                json.dump(items, f)
-        except Exception:
-            pass
-        return items
-
-    # 50 POIs × ~120 chars each ≈ 6K tokens per batch; 900-POI single call caused context overflow.
-    _BATCH_SIZE = 50
 
     def _call_llm(self, city: str, pois: list[POI]) -> list[dict[str, Any]]:
         results: list[dict[str, Any]] = []
@@ -132,18 +98,12 @@ class LLMSyntheticRatingProvider(POIRatingProvider):
                 HumanMessage(content=user_msg),
             ])
             text = response.content.strip()
-            # Strip markdown fences if the LLM wraps output despite instruction
             if text.startswith("```"):
                 text = text.split("```", 2)[1]
                 if text.startswith("json"):
                     text = text[4:]
                 text = text.rsplit("```", 1)[0].strip()
-            parsed: list[dict] = json.loads(text)
-            return parsed
+            return json.loads(text)
         except Exception as exc:
             print(f"[llm_synthetic] generation failed: {exc}", flush=True)
             return []
-
-    def _cache_path(self, city: str) -> str:
-        safe_city = city.replace(" ", "_").replace(",", "").lower()
-        return os.path.join(self._cache_dir, f"llm_synthetic_{safe_city}.json")

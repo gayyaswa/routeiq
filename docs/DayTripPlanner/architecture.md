@@ -143,12 +143,25 @@ For cities outside the Bay Area, `app.py` runs a pre-flight before the agent sta
 
 ### rate_pois — social quality layer
 
-Takes the full OSM POI list and enriches it with provider data:
+Takes the full OSM POI list and enriches it with provider data. Before touching any provider,
+two cache layers are checked in order:
 
 ```
-OSM POIs (80–150)
+rate_pois called with [N POIs]
     │
-    ▼  RatingsFactory.create()  (RATING_PROVIDER env var)
+    ▼  Layer 1 — DayTripState.poi_cache  (in-session dict, zero latency)
+    │  Key: "{city}:{poi_name}"
+    │  Hit  → returned immediately, no I/O
+    │  Miss → proceed to Layer 2
+    │
+    ▼  Layer 2 — ChromaDB poi_ratings collection  (cross-session, 21-day TTL)
+    │  Single batch get: collection.get(ids=["{city}:{poi_name}", ...])
+    │  Hit  → ~0.3s for the whole batch; result written back to Layer 1
+    │  Miss → call provider below
+    │
+    ▼  Provider call (full miss only)
+    │
+    │  RatingsFactory.create()  (RATING_PROVIDER env var)
     │
     ├── TripAdvisor (primary):
     │     1 nearby_search → pool of ~50 attractions (cached 21 days per city)
@@ -163,6 +176,9 @@ OSM POIs (80–150)
           Rating: 0–10 → ÷2 → 0–5.0 normalized
     │
     ▼  ChromaDB ephemeral merge (name similarity + 100m proximity fallback)
+    │  (separate from poi_ratings — this resolves OSM↔provider name differences)
+    │
+    ▼  Results written to Layer 2 (ChromaDB) then Layer 1 (state dict)
     │
     ▼
 RatedPOI: OSM data +
@@ -171,6 +187,21 @@ RatedPOI: OSM data +
   review_source ("TripAdvisor" | "Foursquare"),
   photo_urls (up to 5)
 ```
+
+**`poi_cache` is injected via `RunnableConfig`** — not a visible tool parameter. The `_execute_tool`
+method passes it as `config={"configurable": {"poi_cache": poi_cache}}`; `rate_pois` reads it with
+`config.get("configurable", {}).get("poi_cache", {})`. The LLM never sees this field in the tool
+schema. Mutations inside `rate_pois` propagate back to `_plan` (same dict reference), and
+`_plan` returns `{"poi_cache": poi_cache}` to persist it in LangGraph state via `MemorySaver`.
+
+**Expected timing impact:**
+
+| Scenario | rate_pois latency |
+|---|---|
+| First query, cold (all misses) | ~6s (unchanged — 2 ChromaDB round-trips added, negligible) |
+| Same-session refinement (same POIs) | <0.1s (Layer 1 state hit) |
+| App restart, same city | ~0.3s (Layer 2 ChromaDB batch hit) |
+| Real provider (TripAdvisor/Tavily), 2nd call | ~0.3s (ChromaDB hit — 21 days, no API) |
 
 **Why `POIRatingProvider` not `POIEnrichmentProvider`?** Ratings are the primary *filtering* signal —
 the class name reflects the ranking use case. Reviews and photos are additional signals the provider
@@ -196,6 +227,8 @@ Fallback: haversine proximity ≤ 100 m for cases where embedding similarity fai
 |---|---|---|
 | First query for a new city | 1 pool + N×2 per matched POI | 3 (one per bucket) |
 | Any repeat query (cache hit) | 0 | 0 |
+| Same-session refinement | 0 (Layer 1 state hit) | 0 |
+| App restart, same city | 0 (Layer 2 ChromaDB hit) | 0 |
 | Full demo (5 Bay Area cities, pre-seeded) | 0 live calls | 0 live calls |
 | Cache TTL | 21 days | 21 days |
 
@@ -213,8 +246,10 @@ POIs with `rating < 3.8` AND `review_count < 20` are dropped before scoring.
 
 ## Memory & Multi-turn Refinement
 
-`MemorySaver` checkpoints the full `DayTripState` (messages + draft + approval status) after
-every node. When the user types "remove museums, add more nature":
+`MemorySaver` checkpoints the full `DayTripState` (messages + draft + approval status +
+`poi_cache`) after every node. `poi_cache` is the Layer 1 in-session rating cache — because
+it lives in state, refinements reuse rated POI data instantly without any I/O.
+When the user types "remove museums, add more nature":
 
 1. Streamlit sends `Command(resume={"approved": False, "feedback": "remove museums..."})` 
 2. `review` node appends feedback as a HumanMessage to state
@@ -378,3 +413,5 @@ Judge methods: code-based (routing, recall, enrichment) + LLM-as-judge (match qu
 | 9 | Two-phase plan node (`bind_tools` → `with_structured_output`) | ReAct needs free-form tool calling; final extraction needs Pydantic validation — can't combine in one LLM call |
 | 10 | 21-day cache TTL | Ensures cache outlives any evaluation/demo window |
 | 11 | `NullRatingProvider` fallback | Agent works without any API key; graceful degradation |
+| 12 | `RunnableConfig` injection for `poi_cache` | `@tool` functions can declare `config: RunnableConfig` as a last param — LangChain injects it at `.invoke(args, config=...)` time and it never appears in the tool's JSON schema. Used to pass mutable `poi_cache` dict into `rate_pois` without the LLM knowing about it. |
+| 13 | Two-layer POI rating cache (state dict + ChromaDB) | Layer 1 (state) eliminates all I/O on same-session refinement. Layer 2 (ChromaDB 21-day) eliminates provider API calls on app restart. Provider-agnostic — same cache serves TripAdvisor, Foursquare, Tavily, and LLM synthetic identically. |

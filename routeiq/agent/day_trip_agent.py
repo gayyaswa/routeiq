@@ -117,8 +117,12 @@ class DayTripItinerary(BaseModel):
 
 
 
-def _execute_tool(tool_call: dict[str, Any]) -> ToolMessage:
-    """Dispatch a single tool call and return the ToolMessage result."""
+def _execute_tool(tool_call: dict[str, Any], poi_cache: dict) -> ToolMessage:
+    """Dispatch a single tool call and return the ToolMessage result.
+
+    poi_cache is injected into rate_pois via RunnableConfig so it can read and
+    populate the in-session Layer 1 cache without the LLM knowing about it.
+    """
     from routeiq.timing import log as _tlog
     name = tool_call["name"]
     args = tool_call["args"]
@@ -128,7 +132,8 @@ def _execute_tool(tool_call: dict[str, Any]) -> ToolMessage:
     else:
         try:
             _t0 = time.perf_counter()
-            result = tool_map[name].invoke(args)
+            config = {"configurable": {"poi_cache": poi_cache}}
+            result = tool_map[name].invoke(args, config=config)
             _tlog(f"tool={name} elapsed={time.perf_counter()-_t0:.2f}s")
         except Exception as exc:
             result = f"Tool error: {exc}"
@@ -338,6 +343,9 @@ def _plan(state: DayTripState, config: Optional[RunnableConfig] = None) -> dict:
     llm = create_llm()
     llm_with_tools = llm.bind_tools(ALL_TOOLS)
 
+    # Carry forward the in-session POI cache so rate_pois skips already-processed POIs.
+    poi_cache: dict = dict(state.get("poi_cache") or {})
+
     # First pass: build messages from prompt template.
     # Re-plan pass: messages already contain conversation history + feedback HumanMessage.
     activities = state.get("activities") or []
@@ -418,7 +426,7 @@ def _plan(state: DayTripState, config: Optional[RunnableConfig] = None) -> dict:
             _emit_progress(thread_id, step, label)
 
         for tc in response.tool_calls:
-            messages.append(_execute_tool(tc))
+            messages.append(_execute_tool(tc, poi_cache))
 
     # Compute activity fallback note: which requested activities had no matching POIs?
     activity_fallback_note: str = ""
@@ -535,6 +543,7 @@ def _plan(state: DayTripState, config: Optional[RunnableConfig] = None) -> dict:
         "draft_itinerary": itinerary_dict,
         "route_coords": route_coords,
         "activity_fallback_note": activity_fallback_note or None,
+        "poi_cache": poi_cache,
     }
 
 

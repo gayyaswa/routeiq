@@ -19,3 +19,4 @@ class DayTripState(TypedDict):
     activities: List[str]               # ["hiking", "kids"] — from UI or query parser
     user_context: str                   # "scenic coastal hiking" — adjective phrases
     activity_fallback_note: Optional[str]  # set when a requested activity has no POIs
+    poi_cache: dict                     # "city||poi_name" → full rated POI dict; in-session Layer 1 cache
