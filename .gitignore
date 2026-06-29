@@ -20,6 +20,7 @@ day1_map.html
 .DS_Store
 .claude/
 docs/handoff-session-*.md
+docs/DayTripPlanner/handoff-session-*.md
 logs/
 docs/demo-script.md
 
