@@ -1,168 +1,263 @@
-# Plan: Fine-Tuned Day Trip Intent Classifier (Week 5)
+# Plan B — Fine-Tuned Day Trip Intent Classifier (Week 5)
 
-## Context
+## Problem
 
-Every user query passes through the ReAct orchestrator before any tool is called.
-At `iter=0` the LLM spends **3.70s** reading the query and deciding to call
-`find_city_pois`. At `iter=1` it spends another **3.70s** parsing results and
-deciding to call `rate_pois`. A pre-classification step that injects structured
-intent into `DayTripState` before the loop starts gives the orchestrator a head
-start — it no longer derives `activities` and `user_context` from scratch each turn.
+Activity detection today is a 15-keyword substring bag (`_infer_activities_from_text`, app.py:535).
+It fires only when exact words appear. Queries with natural language intent but no trigger word
+return `activities = []` → `select_pois_for_day` never runs → itinerary is scenic-only.
 
-This doubles as the Week 5 submission: fine-tune Qwen3-1.7B-Base (same LoRA
-workflow as the IT ticket router) on day-trip query examples to produce a
-lightweight, local intent classifier.
+| User says | Keyword match? | What they actually want |
+|---|---|---|
+| "somewhere with a waterfall" | ❌ "waterfall" not in list | `hiking` slot — trail to a waterfall |
+| "my 6-year-old would love it" | ❌ no exact "kids/child" | `kids` slot — playground / zoo |
+| "rollercoasters and theme parks" | ❌ "theme park" not in list | `kids` slot — Great America / LEGOLAND |
+| "wine country tour" | ❌ nothing matches | `food` slot — wineries guaranteed |
+| "historic old town, missions" | ❌ nothing matches | `history` slot — Mission Dolores |
+| "somewhere with great ocean views" | ❌ nothing matches | `scenic` slot — overlooks / viewpoints |
+| "paddleboard or snorkel" | ❌ not in keyword list | `kayaking` + `swimming` slots |
+| "bouldering spot" | ❌ not in list | `hiking` slot |
+| "little ones need entertainment" | ❌ "little ones" not in list | `kids` slot |
+| "brewery and food market" | ❌ nothing matches | `food` slot |
+
+**Without a label:** the slot doesn't exist. A winery might still appear as a scenic fill if its
+scenic score is high enough — but it's never guaranteed. With a label, `select_pois_for_day`
+reserves a dedicated slot regardless of scenic score.
 
 ---
 
 ## What the Classifier Does
 
-**Input:** raw user query — `"I want scenic view trails and maybe a picnic spot"`
+**Input:** raw free-text from the "user context" field
 
 **Output:** structured intent
 ```json
 {
-  "primary_activity": "Nature & Outdoors",
-  "labels": ["Nature & Outdoors", "Scenic Drive"],
-  "user_context": "scenic view trails picnic outdoor"
+  "activities": ["hiking", "kids"],
+  "semantic_queries": {
+    "hiking": "waterfall scenic trail",
+    "kids": "theme park family rides"
+  },
+  "user_context": "waterfall scenic outdoor family"
 }
 ```
 
-**7 labels (mirrors the IT ticket router structure):**
+`activities` → which slots to guarantee in `select_pois_for_day`
+`semantic_queries` → per-slot text fed to Plan A's `POIKnowledgeStore.query()` inside `query_poi_context`
+`user_context` → full context string for `SemanticRanker` and the LLM prompt
 
-| Label | Example queries |
-|---|---|
-| Nature & Outdoors | "hike, swim, state parks, waterfalls" |
-| History & Culture | "historic towns, museums, old missions" |
-| Food & Wine | "wine tasting, farm-to-table, food markets" |
-| Adventure | "kayaking, rock climbing, cycling routes" |
-| Family Activities | "kid-friendly, zoos, splash pads, playgrounds" |
-| Urban Exploration | "murals, coffee shops, breweries, street art" |
-| Scenic Drive | "beautiful views, overlooks, coastal roads" |
+---
+
+## 9 Activity Tags (agreed label set)
+
+Extends the existing 6 with 3 new tags covering the most common semantic gaps:
+
+| Tag | What it covers | Existing? |
+|---|---|---|
+| `hiking` | trails, peaks, waterfalls, nature walks, nature reserves | ✅ |
+| `biking` | cycling paths, bike routes, mountain biking | ✅ |
+| `swimming` | beaches, pools, snorkeling | ✅ |
+| `kayaking` | kayaking, paddleboarding, canoeing, water sports | ✅ |
+| `kids` | playgrounds, zoos, theme parks (Disney, LEGOLAND, Six Flags), family attractions | ✅ |
+| `picnic` | picnic areas, gardens, parks for relaxing | ✅ |
+| `history` | missions, historic sites, battlefields, museums, cultural landmarks | **NEW** |
+| `food` | wineries, breweries, food markets, farm stands, tasting rooms | **NEW** |
+| `scenic` | overlooks, viewpoints, coastal vistas, scenic drives | **NEW** |
+
+**Theme parks** (Disney, LEGOLAND, Universal, Six Flags) → `kids`. OSM tags them as
+`tourism=theme_park`; the OSM classifier already maps `theme_park → kids`.
 
 ---
 
 ## Architecture
 
 ```
-User query
-    → FineTunedIntentClassifier.classify_query(query)   ← NEW (local Qwen3-1.7B)
-        → {primary_activity, labels, user_context}
-    → injected into DayTripState.activities + DayTripState.user_context
-    → ReAct loop starts with pre-populated intent
-        → orchestrator LLM skips intent derivation → faster iter=0, iter=1
+User types free-text in "user context" field
+    │
+    ▼  QueryIntentClassifier.classify(text)     ← NEW: local Qwen3-1.7B (<100ms)
+    │
+    │  {"activities": ["hiking"],
+    │   "semantic_queries": {"hiking": "waterfall trail scenic"},
+    │   "user_context": "waterfall scenic outdoor"}
+    │
+    ▼  replaces _infer_activities_from_text() at app.py:672
+    │
+    ▼  injected into initial_state before graph.stream()
+    │
+    ▼  ReAct loop
+         iter=0: select_pois_for_day(activities=["hiking"])  ← slot guaranteed
+         iter=1: rate_pois → metadata from POIKnowledgeStore (Plan A)
+         iter=2: query_poi_context(semantic_queries={"hiking": "waterfall trail"})
+                  → POIKnowledgeStore.query("waterfall trail")
+                  → Lands End scores high (Tavily: "coastal trail, waterfall at low tide")
 ```
 
-No schema change needed — `activities: List[str]` and `user_context: str` already
-exist in `DayTripState` ([agent_state.py:19-20](../../../routeiq/agent/agent_state.py#L19-L20)).
+**`QueryIntentClassifier` is NOT an `ActivityClassifier` subclass.**
+`ActivityClassifier.classify_batch(city, pois, activities)` classifies POIs.
+`QueryIntentClassifier.classify(text)` classifies a user query. Different role, different class.
+
+The existing OSM/Tavily `ActivityClassifier` still runs inside `select_pois_for_day` for POI matching.
+
+**Dependency on Plan A:** `semantic_queries` only unlocks cross-source semantic search after
+`POIKnowledgeStore` is implemented. Without Plan A, `semantic_queries` still improves
+`SemanticRanker` (already consumes `user_context`) but not `query_poi_context`.
 
 ---
 
-## Files to Create / Modify
+## Why labels matter — semantic gap examples for eval and documentation
 
-### New: `routeiq/activities/finetuned_classifier.py`
-Implements the `ActivityClassifier` base class
-([routeiq/activities/base.py:18-29](../../../routeiq/activities/base.py#L18-L29)).
+### Without label → activities = [] → scenic fills only, no slot guaranteed
+See the table in the Problem section above. Each query returns `activities = []` from the
+keyword bag. The right POI may or may not appear as a scenic fill by luck.
 
-```python
-class FineTunedIntentClassifier(ActivityClassifier):
-    """Classifies day-trip query intent using a LoRA-merged Qwen3-1.7B model (Strategy pattern)."""
+### With fine-tuned label → correct tag → dedicated slot guaranteed
+Same queries → correct activity tags → `select_pois_for_day` reserves the slot.
 
-    def __init__(self, model_path: str):
-        from transformers import pipeline
-        self._pipe = pipeline("text-generation", model=model_path, device_map="auto")
+**The key word is "guaranteed."** "Wine country tour" to Sonoma with no label might return
+zero wineries if their scenic scores are lower than Golden Gate Park. With `food` label it
+gets a winery slot regardless.
 
-    def classify_query(self, query: str) -> IntentResult:
-        prompt = f"Classify this day trip request into one category:\n\n{query}\n\nCategory:"
-        out = self._pipe(prompt, max_new_tokens=10)[0]["generated_text"]
-        label = _extract_label(out)
-        return IntentResult(primary_activity=label, labels=[label],
-                            user_context=query.lower())
-```
-
-### Modify: `routeiq/activities/factory.py`
-Add `ACTIVITY_CLASSIFIER=finetuned` branch:
-```python
-if provider == "finetuned":
-    from routeiq.activities.finetuned_classifier import FineTunedIntentClassifier
-    return FineTunedIntentClassifier(os.getenv("FINETUNED_MODEL_PATH", "./models/intent"))
-```
-
-### Modify: Agent entry point (where initial DayTripState is built)
-```python
-intent = classifier.classify_query(user_query)
-initial_state["activities"]    = intent.labels
-initial_state["user_context"]  = intent.user_context
-```
+**`semantic_queries` adds a second layer of precision:** the winery that gets selected is the
+one most semantically similar to "winery vineyard wine tasting" across all provider content
+in `POIKnowledgeStore` — not just the one with the highest generic scenic score.
 
 ---
 
-## Fine-Tuning Workflow (same as Week 5 IT ticket notebook)
+## Eval golden set — `eval/intent_eval_golden.py`
 
-### Step 1 — Generate training data
-`scripts/generate_intent_training_data.py` — use Claude/GPT-4 to generate 700
-labelled examples (100 per category) in ShareGPT format:
+Three tiers measure different dimensions. Run against both the keyword bag baseline and the
+fine-tuned model; the delta is the submission story.
+
+### Tier 1 — Easy (keyword bag handles these; both should pass)
+```python
+{"query": "I want to go hiking near the city",        "expected": ["hiking"]},
+{"query": "planning a family picnic in the park",     "expected": ["picnic", "kids"]},
+{"query": "find a good swimming beach",               "expected": ["swimming"]},
+{"query": "bike trail along the coast",               "expected": ["biking"]},
+{"query": "kayaking on the bay",                      "expected": ["kayaking"]},
+```
+
+### Tier 2 — Semantic gap (keyword bag fails; fine-tuned should pass)
+```python
+{"query": "somewhere with a waterfall",               "expected": ["hiking"]},
+{"query": "my 6-year-old would love it",              "expected": ["kids"]},
+{"query": "rollercoasters and theme parks",           "expected": ["kids"]},
+{"query": "wine country tour",                        "expected": ["food"]},
+{"query": "historic old town and missions",           "expected": ["history"]},
+{"query": "somewhere with great ocean views",         "expected": ["scenic"]},
+{"query": "paddleboard or snorkel spot",              "expected": ["kayaking", "swimming"]},
+{"query": "bouldering spot near the city",            "expected": ["hiking"]},
+{"query": "little ones need entertainment",           "expected": ["kids"]},
+{"query": "brewery and food market district",         "expected": ["food"]},
+```
+
+### Tier 3 — Multi-label (measures upper bound; both may struggle)
+```python
+{"query": "scenic coastal hike with the kids",        "expected": ["hiking", "kids"]},
+{"query": "wine tasting and a nice nature walk",      "expected": ["food", "hiking"]},
+{"query": "historic brewery district tour",           "expected": ["history", "food"]},
+{"query": "beach day with the family",                "expected": ["swimming", "kids"]},
+{"query": "show me a nice day in SF",                 "expected": []},
+{"query": "plan a relaxing afternoon",                "expected": []},
+```
+
+### Eval metrics per tier
+- **Hit**: predicted set exactly matches expected (or is a superset with no wrong tags)
+- **Partial**: at least one expected tag in predicted
+- **Miss**: no overlap between predicted and expected
+- Report: baseline vs fine-tuned accuracy per tier + overall delta
+- Key story: Tier 2 baseline ≈ 0%, fine-tuned ≥ 80% → that's the submission delta
+
+---
+
+## Training data
+
+**Format:** ShareGPT (mirrors course notebook exactly)
 ```json
 {"conversations": [
-  {"from": "human", "value": "I want to hike and find a waterfall near the city"},
-  {"from": "gpt",   "value": "Nature & Outdoors"}
+  {"from": "system", "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."},
+  {"from": "human",  "value": "I want to find some waterfalls and do a hike with great views"},
+  {"from": "gpt",    "value": "hiking, scenic"}
 ]}
 ```
-Output: `data/intent_train.json` (80%) + `data/intent_val.json` (20% stratified hold-out).
 
-### Step 2 — Register in LLaMA Factory
-```json
-"day_trip_intent": {"file_name": "intent_train.json", "formatting": "sharegpt"}
-```
+**Volume:** ~1000 examples
+- 100 per tag (single-label, clean signal) = 900
+- ~70 multi-label (two-activity combinations) = ~70
+- ~30 none cases (no activity) = 30
 
-### Step 3 — Train via LLaMA Board (Google Colab, free T4)
-- Base model: `Qwen/Qwen3-1.7B-Base`
-- Dataset: `day_trip_intent`
-- Method: LoRA, rank 8
-- Epochs: 3, LR: 2e-4 (defaults)
-- Expected: loss drops ~2.0 → ~0.3
+**Split:** 80/20 stratified → `data/intent_train.json` (800) + `data/intent_val.json` (200)
 
-### Step 4 — Merge + smoke test
-5 obvious queries should route correctly before running full eval.
-
-### Step 5 — Evaluate
-Classification report (precision/recall/F1 per label) + confusion matrix.
-Compare baseline Qwen3-1.7B-Base (zero-shot) vs fine-tuned.
-Expect most confusion: "Nature & Outdoors" ↔ "Scenic Drive".
+**Generation:** `scripts/generate_intent_training_data.py` — calls Claude API in batches,
+generates diverse phrasings per tag (formal, casual, indirect, regional).
 
 ---
 
-## Expected Impact
+## Files to create / modify
 
-| Metric | Before | After |
-|---|---|---|
-| Intent classification | ~1-2s inside orchestrator LLM per turn | <100ms local inference |
-| iter=0 LLM think | 3.70s | ~2-3s (intent pre-populated in state) |
-| iter=1 LLM think | 3.70s | ~2-3s (activities field pre-set) |
-| Estimated total saving | — | ~2-4s per query |
+| File | Change |
+|---|---|
+| `scripts/generate_intent_training_data.py` | **NEW** — 1000 ShareGPT examples via Claude API; writes train/val JSON |
+| `data/intent_train.json` | 800 training examples (output of script) |
+| `data/intent_val.json` | 200 validation examples (output of script) |
+| `eval/intent_eval_golden.py` | **NEW** — 21 golden queries across 3 tiers; `run_intent_eval(classifier)` runs keyword bag + fine-tuned model, reports per-tier accuracy |
+| `routeiq/activities/finetuned_classifier.py` | **NEW** — `QueryIntentClassifier`; loads merged Qwen3-1.7B; `classify(text)` → `IntentResult(activities, semantic_queries, user_context)` |
+| `routeiq/activities/factory.py` | Add `finetuned` branch returning `QueryIntentClassifier` |
+| `routeiq/agent/agent_state.py` | Add `semantic_queries: dict` field (set by classifier; empty dict = default) |
+| `app.py` | Replace `_infer_activities_from_text()` at line 672 with classifier call when `ACTIVITY_PROVIDER=finetuned` |
+| `notebooks/finetune_day_trip_intent.ipynb` | Course notebook adapted for 9-tag day-trip domain; upload to Colab, train, eval |
 
-Not addressed: `rate_pois llm_synthetic=4.94s` — that is the synthetic ratings
-generator, a separate LLM call. See [plan-poi-rating-cache.md](plan-poi-rating-cache.md).
+---
+
+## Colab workflow (mirrors course notebook structure)
+
+1. Upload `data/intent_train.json`, register in `dataset_info.json`
+2. LLaMA Board: `Qwen/Qwen3-1.7B-Base` + `day_trip_intent` dataset + LoRA rank 8 + 3 epochs
+3. Merge adapter → merged model weights
+4. Baseline eval: zero-shot Qwen3-1.7B-Base on `intent_val.json`
+5. Fine-tuned eval: merged model on `intent_val.json`
+6. Metrics: per-tag precision/recall/F1, confusion matrix, baseline vs fine-tuned bar chart
+7. Run `eval/intent_eval_golden.py` on both — Tier 2 delta is the headline result
+
+---
+
+## OSM classifier extension (one-line fix while we're here)
+
+Add `waterway=waterfall` → `hiking` in `osm_classifier.py` so waterfall POIs get classified
+as hiking-relevant in the existing OSM path too. Generalizes the pattern for any tag currently
+missing from the lookup table.
+
+---
+
+## Build order
+
+1. Update `routeiq/agent/agent_state.py` — add `semantic_queries` field
+2. `eval/intent_eval_golden.py` — golden set + baseline run (measures current state)
+3. `scripts/generate_intent_training_data.py` — generate 1000 examples
+4. Adapt course notebook → `notebooks/finetune_day_trip_intent.ipynb`
+5. Colab: train, merge, eval → screenshots for submission
+6. `routeiq/activities/finetuned_classifier.py` + factory + app.py integration
+7. `pytest tests/ -v` → 312+ passed (default `ACTIVITY_PROVIDER=osm` unchanged)
+8. `osm_classifier.py` — add `waterway=waterfall → hiking` and similar missing tags
+
+---
+
+## Submission assets (Week 5, due July 2)
+
+- `data/intent_train.json` + `data/intent_val.json`
+- `scripts/generate_intent_training_data.py`
+- `notebooks/finetune_day_trip_intent.ipynb` (Colab link)
+- `eval/intent_eval_golden.py` + results (baseline vs fine-tuned, 3-tier)
+- `routeiq/activities/finetuned_classifier.py` (integration code)
+- Classification report screenshot + confusion matrix screenshot
+- GitHub link (custom path — not the standard Google Doc screenshot)
 
 ---
 
 ## Verification
 
-1. `python scripts/generate_intent_training_data.py` → 700 examples, 7 labels balanced
-2. Train on Colab T4 → loss curve drops and levels off
-3. Smoke test 5 queries → all route correctly
-4. `pytest tests/ -v` → no regressions
-5. Start app → confirm `DayTripState.activities` pre-populated before iter=0
-6. Compare `logs/timing.log` before/after
-
----
-
-## Week 5 Submission Assets
-
-- `data/intent_train.json` + `data/intent_val.json`
-- `scripts/generate_intent_training_data.py`
-- `routeiq/activities/finetuned_classifier.py`
-- Classification report screenshot
-- Confusion matrix screenshot
-- Baseline vs fine-tuned accuracy delta
-- Colab notebook link
+- `python eval/intent_eval_golden.py --baseline` → keyword bag accuracy (Tier 2 ≈ 0%)
+- Colab: fine-tuned model → per-tag F1, confusion matrix, Tier 2 accuracy ≥ 80%
+- `pytest tests/ -v` → 312+ passed
+- `ACTIVITY_PROVIDER=finetuned FINETUNED_MODEL_PATH=./models/intent streamlit run app.py`
+  → `logs/timing.log` shows `activities` pre-populated before iter=0
+  → "somewhere with a waterfall" → `activities=["hiking"]`, `semantic_queries={"hiking": "waterfall trail"}`
