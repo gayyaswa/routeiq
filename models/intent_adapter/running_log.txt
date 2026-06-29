@@ -1,0 +1,343 @@
+[INFO|2026-06-29 00:25:50] tokenization_utils_base.py:2060 >> loading file vocab.json from cache at /Users/ayyaswamy/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B-Base/snapshots/ea980cb0a6c2ae4b936e82123acc929f1cec04c1/vocab.json
+
+[INFO|2026-06-29 00:25:50] tokenization_utils_base.py:2060 >> loading file merges.txt from cache at /Users/ayyaswamy/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B-Base/snapshots/ea980cb0a6c2ae4b936e82123acc929f1cec04c1/merges.txt
+
+[INFO|2026-06-29 00:25:50] tokenization_utils_base.py:2060 >> loading file tokenizer.json from cache at /Users/ayyaswamy/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B-Base/snapshots/ea980cb0a6c2ae4b936e82123acc929f1cec04c1/tokenizer.json
+
+[INFO|2026-06-29 00:25:50] tokenization_utils_base.py:2060 >> loading file added_tokens.json from cache at None
+
+[INFO|2026-06-29 00:25:50] tokenization_utils_base.py:2060 >> loading file special_tokens_map.json from cache at None
+
+[INFO|2026-06-29 00:25:50] tokenization_utils_base.py:2060 >> loading file tokenizer_config.json from cache at /Users/ayyaswamy/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B-Base/snapshots/ea980cb0a6c2ae4b936e82123acc929f1cec04c1/tokenizer_config.json
+
+[INFO|2026-06-29 00:25:50] tokenization_utils_base.py:2060 >> loading file chat_template.jinja from cache at None
+
+[INFO|2026-06-29 00:25:50] tokenization_utils_base.py:2323 >> Special tokens have been added in the vocabulary, make sure the associated word embeddings are fine-tuned or trained.
+
+[INFO|2026-06-29 00:25:50] configuration_utils.py:693 >> loading configuration file config.json from cache at /Users/ayyaswamy/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B-Base/snapshots/ea980cb0a6c2ae4b936e82123acc929f1cec04c1/config.json
+
+[INFO|2026-06-29 00:25:50] configuration_utils.py:765 >> Model config Qwen3Config {
+  "architectures": [
+    "Qwen3ForCausalLM"
+  ],
+  "attention_bias": false,
+  "attention_dropout": 0.0,
+  "bos_token_id": 151643,
+  "eos_token_id": 151643,
+  "head_dim": 128,
+  "hidden_act": "silu",
+  "hidden_size": 2048,
+  "initializer_range": 0.02,
+  "intermediate_size": 6144,
+  "max_position_embeddings": 32768,
+  "max_window_layers": 28,
+  "model_type": "qwen3",
+  "num_attention_heads": 16,
+  "num_hidden_layers": 28,
+  "num_key_value_heads": 8,
+  "rms_norm_eps": 1e-06,
+  "rope_scaling": null,
+  "rope_theta": 1000000,
+  "sliding_window": null,
+  "tie_word_embeddings": true,
+  "torch_dtype": "bfloat16",
+  "transformers_version": "4.51.3",
+  "use_cache": true,
+  "use_sliding_window": false,
+  "vocab_size": 151936
+}
+
+
+[INFO|2026-06-29 00:25:50] tokenization_utils_base.py:2060 >> loading file vocab.json from cache at /Users/ayyaswamy/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B-Base/snapshots/ea980cb0a6c2ae4b936e82123acc929f1cec04c1/vocab.json
+
+[INFO|2026-06-29 00:25:50] tokenization_utils_base.py:2060 >> loading file merges.txt from cache at /Users/ayyaswamy/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B-Base/snapshots/ea980cb0a6c2ae4b936e82123acc929f1cec04c1/merges.txt
+
+[INFO|2026-06-29 00:25:50] tokenization_utils_base.py:2060 >> loading file tokenizer.json from cache at /Users/ayyaswamy/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B-Base/snapshots/ea980cb0a6c2ae4b936e82123acc929f1cec04c1/tokenizer.json
+
+[INFO|2026-06-29 00:25:50] tokenization_utils_base.py:2060 >> loading file added_tokens.json from cache at None
+
+[INFO|2026-06-29 00:25:50] tokenization_utils_base.py:2060 >> loading file special_tokens_map.json from cache at None
+
+[INFO|2026-06-29 00:25:50] tokenization_utils_base.py:2060 >> loading file tokenizer_config.json from cache at /Users/ayyaswamy/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B-Base/snapshots/ea980cb0a6c2ae4b936e82123acc929f1cec04c1/tokenizer_config.json
+
+[INFO|2026-06-29 00:25:50] tokenization_utils_base.py:2060 >> loading file chat_template.jinja from cache at None
+
+[INFO|2026-06-29 00:25:51] tokenization_utils_base.py:2323 >> Special tokens have been added in the vocabulary, make sure the associated word embeddings are fine-tuned or trained.
+
+[INFO|2026-06-29 00:25:51] logging.py:143 >> Loading dataset intent_train.json...
+
+[INFO|2026-06-29 00:25:53] configuration_utils.py:693 >> loading configuration file config.json from cache at /Users/ayyaswamy/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B-Base/snapshots/ea980cb0a6c2ae4b936e82123acc929f1cec04c1/config.json
+
+[INFO|2026-06-29 00:25:53] configuration_utils.py:765 >> Model config Qwen3Config {
+  "architectures": [
+    "Qwen3ForCausalLM"
+  ],
+  "attention_bias": false,
+  "attention_dropout": 0.0,
+  "bos_token_id": 151643,
+  "eos_token_id": 151643,
+  "head_dim": 128,
+  "hidden_act": "silu",
+  "hidden_size": 2048,
+  "initializer_range": 0.02,
+  "intermediate_size": 6144,
+  "max_position_embeddings": 32768,
+  "max_window_layers": 28,
+  "model_type": "qwen3",
+  "num_attention_heads": 16,
+  "num_hidden_layers": 28,
+  "num_key_value_heads": 8,
+  "rms_norm_eps": 1e-06,
+  "rope_scaling": null,
+  "rope_theta": 1000000,
+  "sliding_window": null,
+  "tie_word_embeddings": true,
+  "torch_dtype": "bfloat16",
+  "transformers_version": "4.51.3",
+  "use_cache": true,
+  "use_sliding_window": false,
+  "vocab_size": 151936
+}
+
+
+[INFO|2026-06-29 00:25:53] logging.py:143 >> KV cache is disabled during training.
+
+[INFO|2026-06-29 00:27:01] modeling_utils.py:1124 >> loading weights file model.safetensors from cache at /Users/ayyaswamy/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B-Base/snapshots/ea980cb0a6c2ae4b936e82123acc929f1cec04c1/model.safetensors
+
+[INFO|2026-06-29 00:27:01] modeling_utils.py:2167 >> Instantiating Qwen3ForCausalLM model under default dtype torch.bfloat16.
+
+[INFO|2026-06-29 00:27:01] configuration_utils.py:1142 >> Generate config GenerationConfig {
+  "bos_token_id": 151643,
+  "eos_token_id": 151643,
+  "use_cache": false
+}
+
+
+[INFO|2026-06-29 00:27:03] modeling_utils.py:4930 >> All model checkpoint weights were used when initializing Qwen3ForCausalLM.
+
+
+[INFO|2026-06-29 00:27:03] modeling_utils.py:4938 >> All the weights of Qwen3ForCausalLM were initialized from the model checkpoint at Qwen/Qwen3-1.7B-Base.
+If your task is similar to the task the model of the checkpoint was trained on, you can already use Qwen3ForCausalLM for predictions without further training.
+
+[INFO|2026-06-29 00:27:03] configuration_utils.py:1097 >> loading configuration file generation_config.json from cache at /Users/ayyaswamy/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B-Base/snapshots/ea980cb0a6c2ae4b936e82123acc929f1cec04c1/generation_config.json
+
+[INFO|2026-06-29 00:27:03] configuration_utils.py:1142 >> Generate config GenerationConfig {
+  "bos_token_id": 151643,
+  "eos_token_id": 151643,
+  "max_new_tokens": 2048
+}
+
+
+[INFO|2026-06-29 00:27:03] logging.py:143 >> Gradient checkpointing enabled.
+
+[INFO|2026-06-29 00:27:03] logging.py:143 >> Using torch SDPA for faster training and inference.
+
+[INFO|2026-06-29 00:27:03] logging.py:143 >> Upcasting trainable params to float32.
+
+[INFO|2026-06-29 00:27:03] logging.py:143 >> Fine-tuning method: LoRA
+
+[INFO|2026-06-29 00:27:03] logging.py:143 >> Found linear modules: k_proj,up_proj,down_proj,gate_proj,o_proj,q_proj,v_proj
+
+[INFO|2026-06-29 00:27:04] logging.py:143 >> trainable params: 8,716,288 || all params: 1,729,291,264 || trainable%: 0.5040
+
+[INFO|2026-06-29 00:27:04] trainer.py:516 >> You have loaded a model on multiple GPUs. `is_model_parallel` attribute will be force-set to `True` to avoid any unexpected behavior such as device placement mismatching.
+
+[INFO|2026-06-29 00:27:04] trainer.py:748 >> Using auto half precision backend
+
+[INFO|2026-06-29 00:27:04] trainer.py:2414 >> ***** Running training *****
+
+[INFO|2026-06-29 00:27:04] trainer.py:2415 >>   Num examples = 656
+
+[INFO|2026-06-29 00:27:04] trainer.py:2416 >>   Num Epochs = 3
+
+[INFO|2026-06-29 00:27:04] trainer.py:2417 >>   Instantaneous batch size per device = 2
+
+[INFO|2026-06-29 00:27:04] trainer.py:2420 >>   Total train batch size (w. parallel, distributed & accumulation) = 16
+
+[INFO|2026-06-29 00:27:04] trainer.py:2421 >>   Gradient Accumulation steps = 8
+
+[INFO|2026-06-29 00:27:04] trainer.py:2422 >>   Total optimization steps = 123
+
+[INFO|2026-06-29 00:27:04] trainer.py:2423 >>   Number of trainable parameters = 8,716,288
+
+[INFO|2026-06-29 00:27:24] logging.py:143 >> {'loss': 6.3035, 'learning_rate': 1.9948e-04, 'epoch': 0.12, 'throughput': 375.45}
+
+[INFO|2026-06-29 00:27:37] logging.py:143 >> {'loss': 0.5559, 'learning_rate': 1.9737e-04, 'epoch': 0.24, 'throughput': 449.03}
+
+[INFO|2026-06-29 00:27:51] logging.py:143 >> {'loss': 0.1726, 'learning_rate': 1.9367e-04, 'epoch': 0.37, 'throughput': 477.46}
+
+[INFO|2026-06-29 00:28:06] logging.py:143 >> {'loss': 0.1883, 'learning_rate': 1.8845e-04, 'epoch': 0.49, 'throughput': 488.17}
+
+[INFO|2026-06-29 00:28:20] logging.py:143 >> {'loss': 0.1304, 'learning_rate': 1.8179e-04, 'epoch': 0.61, 'throughput': 495.49}
+
+[INFO|2026-06-29 00:28:34] logging.py:143 >> {'loss': 0.0692, 'learning_rate': 1.7380e-04, 'epoch': 0.73, 'throughput': 501.01}
+
+[INFO|2026-06-29 00:28:49] logging.py:143 >> {'loss': 0.0662, 'learning_rate': 1.6460e-04, 'epoch': 0.85, 'throughput': 504.51}
+
+[INFO|2026-06-29 00:29:03] logging.py:143 >> {'loss': 0.0656, 'learning_rate': 1.5436e-04, 'epoch': 0.98, 'throughput': 509.12}
+
+[INFO|2026-06-29 00:29:16] logging.py:143 >> {'loss': 0.0728, 'learning_rate': 1.4322e-04, 'epoch': 1.10, 'throughput': 513.15}
+
+[INFO|2026-06-29 00:29:31] logging.py:143 >> {'loss': 0.0252, 'learning_rate': 1.3139e-04, 'epoch': 1.22, 'throughput': 515.13}
+
+[INFO|2026-06-29 00:29:44] logging.py:143 >> {'loss': 0.0572, 'learning_rate': 1.1904e-04, 'epoch': 1.34, 'throughput': 518.12}
+
+[INFO|2026-06-29 00:29:58] logging.py:143 >> {'loss': 0.0201, 'learning_rate': 1.0638e-04, 'epoch': 1.46, 'throughput': 520.19}
+
+[INFO|2026-06-29 00:30:12] logging.py:143 >> {'loss': 0.0091, 'learning_rate': 9.3619e-05, 'epoch': 1.59, 'throughput': 521.67}
+
+[INFO|2026-06-29 00:30:26] logging.py:143 >> {'loss': 0.0118, 'learning_rate': 8.0961e-05, 'epoch': 1.71, 'throughput': 522.57}
+
+[INFO|2026-06-29 00:30:41] logging.py:143 >> {'loss': 0.0629, 'learning_rate': 6.8613e-05, 'epoch': 1.83, 'throughput': 522.28}
+
+[INFO|2026-06-29 00:30:56] logging.py:143 >> {'loss': 0.0103, 'learning_rate': 5.6776e-05, 'epoch': 1.95, 'throughput': 520.06}
+
+[INFO|2026-06-29 00:31:13] logging.py:143 >> {'loss': 0.0032, 'learning_rate': 4.5643e-05, 'epoch': 2.07, 'throughput': 516.19}
+
+[INFO|2026-06-29 00:31:30] logging.py:143 >> {'loss': 0.0026, 'learning_rate': 3.5396e-05, 'epoch': 2.20, 'throughput': 510.27}
+
+[INFO|2026-06-29 00:31:50] logging.py:143 >> {'loss': 0.0059, 'learning_rate': 2.6200e-05, 'epoch': 2.32, 'throughput': 502.34}
+
+[INFO|2026-06-29 00:32:11] logging.py:143 >> {'loss': 0.0016, 'learning_rate': 1.8207e-05, 'epoch': 2.44, 'throughput': 492.04}
+
+[INFO|2026-06-29 00:32:11] trainer.py:3984 >> Saving model checkpoint to /Users/ayyaswamy/projects/routeiq/models/intent_adapter/checkpoint-100
+
+[INFO|2026-06-29 00:32:11] configuration_utils.py:693 >> loading configuration file config.json from cache at /Users/ayyaswamy/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B-Base/snapshots/ea980cb0a6c2ae4b936e82123acc929f1cec04c1/config.json
+
+[INFO|2026-06-29 00:32:11] configuration_utils.py:765 >> Model config Qwen3Config {
+  "architectures": [
+    "Qwen3ForCausalLM"
+  ],
+  "attention_bias": false,
+  "attention_dropout": 0.0,
+  "bos_token_id": 151643,
+  "eos_token_id": 151643,
+  "head_dim": 128,
+  "hidden_act": "silu",
+  "hidden_size": 2048,
+  "initializer_range": 0.02,
+  "intermediate_size": 6144,
+  "max_position_embeddings": 32768,
+  "max_window_layers": 28,
+  "model_type": "qwen3",
+  "num_attention_heads": 16,
+  "num_hidden_layers": 28,
+  "num_key_value_heads": 8,
+  "rms_norm_eps": 1e-06,
+  "rope_scaling": null,
+  "rope_theta": 1000000,
+  "sliding_window": null,
+  "tie_word_embeddings": true,
+  "torch_dtype": "bfloat16",
+  "transformers_version": "4.51.3",
+  "use_cache": true,
+  "use_sliding_window": false,
+  "vocab_size": 151936
+}
+
+
+[INFO|2026-06-29 00:32:11] tokenization_utils_base.py:2510 >> tokenizer config file saved in /Users/ayyaswamy/projects/routeiq/models/intent_adapter/checkpoint-100/tokenizer_config.json
+
+[INFO|2026-06-29 00:32:11] tokenization_utils_base.py:2519 >> Special tokens file saved in /Users/ayyaswamy/projects/routeiq/models/intent_adapter/checkpoint-100/special_tokens_map.json
+
+[INFO|2026-06-29 00:32:34] logging.py:143 >> {'loss': 0.0123, 'learning_rate': 1.1546e-05, 'epoch': 2.56, 'throughput': 480.23}
+
+[INFO|2026-06-29 00:32:58] logging.py:143 >> {'loss': 0.0106, 'learning_rate': 6.3253e-06, 'epoch': 2.68, 'throughput': 469.56}
+
+[INFO|2026-06-29 00:33:23] logging.py:143 >> {'loss': 0.0052, 'learning_rate': 2.6305e-06, 'epoch': 2.80, 'throughput': 458.42}
+
+[INFO|2026-06-29 00:33:47] logging.py:143 >> {'loss': 0.0012, 'learning_rate': 5.2144e-07, 'epoch': 2.93, 'throughput': 449.96}
+
+[INFO|2026-06-29 00:34:01] trainer.py:3984 >> Saving model checkpoint to /Users/ayyaswamy/projects/routeiq/models/intent_adapter/checkpoint-123
+
+[INFO|2026-06-29 00:34:01] configuration_utils.py:693 >> loading configuration file config.json from cache at /Users/ayyaswamy/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B-Base/snapshots/ea980cb0a6c2ae4b936e82123acc929f1cec04c1/config.json
+
+[INFO|2026-06-29 00:34:01] configuration_utils.py:765 >> Model config Qwen3Config {
+  "architectures": [
+    "Qwen3ForCausalLM"
+  ],
+  "attention_bias": false,
+  "attention_dropout": 0.0,
+  "bos_token_id": 151643,
+  "eos_token_id": 151643,
+  "head_dim": 128,
+  "hidden_act": "silu",
+  "hidden_size": 2048,
+  "initializer_range": 0.02,
+  "intermediate_size": 6144,
+  "max_position_embeddings": 32768,
+  "max_window_layers": 28,
+  "model_type": "qwen3",
+  "num_attention_heads": 16,
+  "num_hidden_layers": 28,
+  "num_key_value_heads": 8,
+  "rms_norm_eps": 1e-06,
+  "rope_scaling": null,
+  "rope_theta": 1000000,
+  "sliding_window": null,
+  "tie_word_embeddings": true,
+  "torch_dtype": "bfloat16",
+  "transformers_version": "4.51.3",
+  "use_cache": true,
+  "use_sliding_window": false,
+  "vocab_size": 151936
+}
+
+
+[INFO|2026-06-29 00:34:01] tokenization_utils_base.py:2510 >> tokenizer config file saved in /Users/ayyaswamy/projects/routeiq/models/intent_adapter/checkpoint-123/tokenizer_config.json
+
+[INFO|2026-06-29 00:34:01] tokenization_utils_base.py:2519 >> Special tokens file saved in /Users/ayyaswamy/projects/routeiq/models/intent_adapter/checkpoint-123/special_tokens_map.json
+
+[INFO|2026-06-29 00:34:01] trainer.py:2681 >> 
+
+Training completed. Do not forget to share your model on huggingface.co/models =)
+
+
+
+[INFO|2026-06-29 00:34:01] trainer.py:3984 >> Saving model checkpoint to /Users/ayyaswamy/projects/routeiq/models/intent_adapter
+
+[INFO|2026-06-29 00:34:01] configuration_utils.py:693 >> loading configuration file config.json from cache at /Users/ayyaswamy/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B-Base/snapshots/ea980cb0a6c2ae4b936e82123acc929f1cec04c1/config.json
+
+[INFO|2026-06-29 00:34:01] configuration_utils.py:765 >> Model config Qwen3Config {
+  "architectures": [
+    "Qwen3ForCausalLM"
+  ],
+  "attention_bias": false,
+  "attention_dropout": 0.0,
+  "bos_token_id": 151643,
+  "eos_token_id": 151643,
+  "head_dim": 128,
+  "hidden_act": "silu",
+  "hidden_size": 2048,
+  "initializer_range": 0.02,
+  "intermediate_size": 6144,
+  "max_position_embeddings": 32768,
+  "max_window_layers": 28,
+  "model_type": "qwen3",
+  "num_attention_heads": 16,
+  "num_hidden_layers": 28,
+  "num_key_value_heads": 8,
+  "rms_norm_eps": 1e-06,
+  "rope_scaling": null,
+  "rope_theta": 1000000,
+  "sliding_window": null,
+  "tie_word_embeddings": true,
+  "torch_dtype": "bfloat16",
+  "transformers_version": "4.51.3",
+  "use_cache": true,
+  "use_sliding_window": false,
+  "vocab_size": 151936
+}
+
+
+[INFO|2026-06-29 00:34:01] tokenization_utils_base.py:2510 >> tokenizer config file saved in /Users/ayyaswamy/projects/routeiq/models/intent_adapter/tokenizer_config.json
+
+[INFO|2026-06-29 00:34:01] tokenization_utils_base.py:2519 >> Special tokens file saved in /Users/ayyaswamy/projects/routeiq/models/intent_adapter/special_tokens_map.json
+
+[WARNING|2026-06-29 00:34:02] logging.py:148 >> No metric eval_loss to plot.
+
+[WARNING|2026-06-29 00:34:02] logging.py:148 >> No metric eval_accuracy to plot.
+
+[INFO|2026-06-29 00:34:02] modelcard.py:450 >> Dropping the following result as it does not have all the necessary fields:
+{'task': {'name': 'Causal Language Modeling', 'type': 'text-generation'}}
+

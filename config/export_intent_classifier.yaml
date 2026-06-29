@@ -1,0 +1,10 @@
+### Merge LoRA adapter into base model weights
+### Run after training: llamafactory-cli export config/export_intent_classifier.yaml
+
+model_name_or_path: Qwen/Qwen3-1.7B-Base
+adapter_name_or_path: ./models/intent_adapter
+template: qwen3
+finetuning_type: lora
+export_dir: ./models/intent
+export_size: 2
+export_legacy_format: false

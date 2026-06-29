@@ -1,0 +1,16 @@
+{
+  "day_trip_intent": {
+    "file_name": "intent_train.json",
+    "formatting": "sharegpt",
+    "columns": {
+      "messages": "conversations"
+    }
+  },
+  "day_trip_intent_val": {
+    "file_name": "intent_val.json",
+    "formatting": "sharegpt",
+    "columns": {
+      "messages": "conversations"
+    }
+  }
+}

@@ -35,3 +35,9 @@ eval/*.txt
 docs/eval_week4/Social Media*
 docs/eval_week4/Week4 Project*
 docs/eval_week4/eval-plan-session-*.md
+
+# Fine-tuned model weights — too large for git (6.7GB)
+# Regenerate with: llamafactory-cli export config/export_intent_classifier.yaml
+models/intent/
+# Intermediate training checkpoints (adapter_model.safetensors is committed)
+models/intent_adapter/checkpoint-*/

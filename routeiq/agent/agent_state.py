@@ -20,3 +20,4 @@ class DayTripState(TypedDict):
     user_context: str                   # "scenic coastal hiking" — adjective phrases
     activity_fallback_note: Optional[str]  # set when a requested activity has no POIs
     poi_cache: dict                     # "city||poi_name" → full rated POI dict; in-session Layer 1 cache
+    semantic_queries: dict              # {"hiking": "waterfall trail scenic"} — per-slot vector search strings

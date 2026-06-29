@@ -669,10 +669,19 @@ with tab1:
         # If the user left the multiselect empty but described activities in the text
         # input, infer activity tags from the text so select_pois_for_day is invoked.
         _explicit = list(dt_activities)
-        _inferred = _infer_activities_from_text(dt_user_context) if not _explicit else []
-        final_activities = _explicit or _inferred
-        if _inferred:
-            _logger.info("plan_btn: inferred activities from user_context text: %s", _inferred)
+        _semantic_queries: dict = {}
+        if os.getenv("ACTIVITY_PROVIDER", "osm").lower() == "finetuned" and not _explicit:
+            from routeiq.activities.finetuned_classifier import create_query_intent_classifier
+            _clf = create_query_intent_classifier()
+            _clf_result = _clf.classify(dt_user_context)
+            final_activities = _clf_result["activities"]
+            _semantic_queries = _clf_result["semantic_queries"]
+            _logger.info("plan_btn: finetuned classifier → activities=%s", final_activities)
+        else:
+            _inferred = _infer_activities_from_text(dt_user_context) if not _explicit else []
+            final_activities = _explicit or _inferred
+            if _inferred:
+                _logger.info("plan_btn: inferred activities from user_context text: %s", _inferred)
 
         initial_state = {
             "messages": [],
@@ -688,6 +697,7 @@ with tab1:
             "user_context": dt_user_context.strip(),
             "activity_fallback_note": None,
             "poi_cache": {},
+            "semantic_queries": _semantic_queries,
         }
         config = {"configurable": {"thread_id": new_thread_id}}
         thread = threading.Thread(
