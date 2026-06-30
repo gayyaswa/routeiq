@@ -146,7 +146,9 @@ llamafactory-cli train config/train_intent_classifier.yaml
 # or via LLaMA Board UI: llamafactory-cli webui → localhost:7860
 ```
 
-**Result:** Final loss 0.32 over 123 steps (3 epochs). Loss curve at `models/intent_adapter/training_loss.png`.
+**Result:** Final loss 0.32 over 123 steps (3 epochs).
+
+![Training loss curve — 3 epochs, final loss 0.32](../../models/intent_adapter/training_loss.png)
 
 **Merge adapter → full model:**
 ```bash
@@ -221,6 +223,10 @@ Queries that require multiple activity tags simultaneously, plus two `none` case
 | **Tier 3 — Multi-label** | Multiple tags + none cases | 4/6 (67%) | 1/6 (17%) | −3 |
 
 **Tier 2** is the headline: these are real queries users would type that the existing system silently ignores. Going from 30% → 90% on this tier means 6 additional queries per 10 now correctly trigger `select_pois_for_day` and get activity-guaranteed itineraries instead of generic scenic fills.
+
+**Eval output** (`FINETUNED_MODEL_PATH=./models/intent python3 eval/intent_eval_golden.py`):
+
+![Baseline vs fine-tuned comparison table](../images/intent_eval_comparison.png)
 
 ### Key examples
 
