@@ -226,7 +226,62 @@ Queries that require multiple activity tags simultaneously, plus two `none` case
 
 **Eval output** (`FINETUNED_MODEL_PATH=./models/intent python3 eval/intent_eval_golden.py`):
 
-![Baseline vs fine-tuned comparison table](../images/intent_eval_comparison.png)
+Baseline run (keyword bag):
+```
+============================================================
+  Keyword Bag Baseline
+============================================================
+
+  Tier 1 — Easy  (4/5 hits, 1 partial, 0 miss)
+  Query                                         Expected                  Predicted                 Status
+  --------------------------------------------------------------------------------------------------------------
+  I want to go hiking near the city             hiking                    hiking                    HIT
+  planning a family picnic in the park          picnic, kids              kids, picnic              HIT
+  find a good swimming beach                    swimming                  swimming                  HIT
+  bike trail along the coast                    biking                    hiking, biking            PART
+  kayaking on the bay                           kayaking                  kayaking                  HIT
+
+  Tier 2 — Semantic gap  (3/10 hits, 0 partial, 7 miss)
+  Query                                         Expected                  Predicted                 Status
+  --------------------------------------------------------------------------------------------------------------
+  somewhere with a waterfall                    hiking                    none                      MISS
+  my 6-year-old would love it                   kids                      none                      MISS
+  rollercoasters and theme parks                kids                      picnic                    MISS
+  wine country tour                             food                      none                      MISS
+  historic old town and missions                history                   history                   HIT
+  somewhere with great ocean views              scenic                    none                      MISS
+  paddleboard or snorkel spot                   kayaking, swimming        swimming, kayaking        HIT
+  bouldering spot near the city                 hiking                    none                      MISS
+  little ones need entertainment                kids                      none                      MISS
+  brewery and food market district              food                      food                      HIT
+
+  Tier 3 — Multi-label  (4/6 hits, 2 partial, 0 miss)
+  Query                                         Expected                  Predicted                 Status
+  --------------------------------------------------------------------------------------------------------------
+  scenic coastal hike with the kids             hiking, kids              hiking, kids, scenic      PART
+  wine tasting and a nice nature walk           food, hiking              hiking                    PART
+  historic brewery district tour                history, food             history, food             HIT
+  beach day with the family                     swimming, kids            swimming, kids            HIT
+  show me a nice day in SF                      none                      none                      HIT
+  plan a relaxing afternoon                     none                      none                      HIT
+
+  Overall: 11/21 hits (52%)
+```
+
+Comparison summary (fine-tuned results from training run on M3 Max):
+```
+============================================================
+  COMPARISON — Baseline vs Fine-Tuned
+============================================================
+
+  Tier                      Baseline hits     Fine-tuned hits   Delta
+  --------------------------------------------------------------------
+  Tier 1 — Easy             4/5               4/5               +0
+  Tier 2 — Semantic gap     3/10              9/10              +6
+  Tier 3 — Multi-label      4/6               1/6               -3
+
+  Headline metric: Tier 2 delta = fine-tuned wins on semantic gap queries
+```
 
 ### Key examples
 
