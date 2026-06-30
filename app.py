@@ -624,6 +624,20 @@ with tab1:
     if _city_missing:
         st.caption("Enter a city name above to enable planning.")
 
+    # Show persisted planning error (cleared when user tries again)
+    if dt_phase == "idle":
+        _last_err = st.session_state.pop("dt_last_error", None)
+        if _last_err:
+            _err_str = str(_last_err)
+            if "stops" in _last_err and "missing" in _last_err:
+                st.error(
+                    "The planner couldn't build an itinerary for that request — "
+                    "the activity or context wasn't specific enough for the available POIs. "
+                    "Try selecting an interest above (e.g. Food & Drink, History) or rephrasing your context."
+                )
+            else:
+                st.error(f"Planning error: {_err_str[:300]}")
+
     if plan_btn and dt_city.strip() and dt_phase not in ("planning", "narrating"):
         kg, dt_graph = _load_day_trip_resources()
 
@@ -775,8 +789,8 @@ with tab1:
                     st.error("Agent did not produce a draft. Try again.")
             else:
                 st.session_state["dt_phase"] = "idle"
+                st.session_state["dt_last_error"] = rh.get("error", "unknown")
                 _dt_area.empty()
-                st.error(f"Planning error: {rh.get('error', 'unknown')}")
             st.rerun()
 
     # ── Draft ready / narrating — map + cards + approve/refine/poll ─────────────
