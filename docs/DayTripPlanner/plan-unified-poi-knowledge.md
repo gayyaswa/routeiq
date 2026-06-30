@@ -165,3 +165,87 @@ The two plans combine: Plan A provides the rich index, Plan B provides the preci
 3. `rate_pois` timing: confirm <0.5s after prefetch (no provider call inside ReAct loop)
 4. POI with no TripAdvisor match → confirm Tavily fills the gap, LLM synthetic as final fallback
 5. `pytest tests/ -v` → 312+ passed; new `test_poi_knowledge_store.py` passes
+
+---
+
+## Open items from Week 5 (fix before or alongside Plan A)
+
+These gaps surfaced during Week 5 testing ("I wanna go night life partying" → no results).
+They are prerequisites for the `activity_tags` metadata field in `poi_knowledge` to be reliable.
+
+### 1. Train query classifier on ambiguous / nightlife searches
+
+**Problem:** "nightlife partying", "bar hopping", "cocktails", "live music" return `activities=[]`
+from both the keyword bag and (likely) the fine-tuned Qwen3-1.7B model, because the training
+data has no nightlife paraphrases and `nightlife` is not one of the 9 supported tags.
+
+**Permanent fix:** Add ~50 training examples mapping nightlife paraphrases → `food`:
+
+```python
+# examples to add to scripts/generate_intent_training_data.py
+"nightlife and bar hopping"         → food
+"cocktails and rooftop bars"        → food
+"live music venue"                  → food
+"club night out"                    → food
+"brewery tour and craft beer"       → food
+"wine bar evening"                  → food
+"jazz club and dinner"              → food, history
+```
+
+Retrain with the augmented dataset. Tier 2 eval should gain these cases. Re-run
+`eval/intent_eval_golden.py` to confirm before shipping.
+
+**Note:** The query classifier (Plan B) maps *user intent* → activity tags. The OSM/Tavily
+classifier (Plan A prefetch) maps *POI OSM tags* → activity tags. Both need to speak the
+same 9-tag vocabulary.
+
+---
+
+### 2. OSM classifier coverage for Week 5 tags (`food`, `history`, `scenic`)
+
+**Problem:** `OSMActivityClassifier` has no entries for `food`, `history`, or `scenic`.
+When the fine-tuned classifier correctly outputs `food` for "nightlife", `select_pois_for_day`
+finds 0 food POIs and falls back to scenic fills. The `activity_tags` field in the
+planned `poi_knowledge` collection would also be empty for these tags.
+
+**Two-tier fix:**
+
+- **Production path** (`ACTIVITY_PROVIDER=tavily`): `TavilyActivityClassifier` uses LLM + web
+  search to classify POIs — it handles bars/clubs as `food` and historic sites as `history`
+  without any code changes. This is the recommended path for Plan A prefetch.
+
+- **Offline fallback** (`ACTIVITY_PROVIDER=osm`): add mappings to `osm_classifier.py` so the
+  no-API path still works for the 3 new tags:
+
+  | OSM subtype | Activity tag |
+  |---|---|
+  | `winery`, `restaurant`, `cafe`, `bar`, `pub`, `nightclub` | `food` |
+  | `museum`, `ruins`, `castle`, `fort`, `archaeological_site`, `monument`, `memorial`, `battlefield`, `mission` | `history` |
+  | `viewpoint`, `lighthouse`, `cape`, `bay` | `scenic` |
+
+  Also add `_CATEGORY_KEYWORDS`: `winer/brew/restaur/bar → food`, `histor/museum/mission/castle → history`, `view/overlook/vista → scenic`.
+
+**Impact on Plan A:** `city_prefetcher.py` should use `ACTIVITY_PROVIDER=tavily` when
+available so the prefetched `activity_tags` metadata is populated correctly for all 9 tags.
+
+---
+
+### 3. ReAct loop stability for unrecognised user contexts
+
+**Problem (observed):** "nightlife partying" with `activities=[]` caused the LLM to call
+`find_city_pois` twice and `rate_pois` 4 times before hitting the 6-iteration cap. The
+messy tool context then caused structured extraction to return JSON without the `stops` key
+(Pydantic `Field required` error). User saw no results; error was silently discarded.
+
+**Mitigations already applied (Session 50 follow-up):**
+- `app.py`: error now persisted in `dt_last_error` and displayed on the next idle render
+- `day_trip_agent.py`: extraction prompt now requires `stops` to be present with ≥5 items
+
+**Remaining fix:** Prevent duplicate tool calls in the ReAct loop. When `find_city_pois`
+has already returned results, the iter=0 nudge should suppress re-calls. Consider tracking
+`called_tools: set[str]` in the loop and injecting a HumanMessage nudge if a POI discovery
+tool is called a second time.
+
+Alternatively, Plan A makes this less critical: once `rate_pois` is a fast metadata lookup
+(≤0.5s), hitting max_iterations wastes only LLM inference time, not API calls — and the
+much faster loop is less likely to exhaust iterations before the extraction.
