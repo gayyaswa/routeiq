@@ -27,7 +27,8 @@ streamlit run app.py
 | `NEBIUS_API_KEY` | — | Required when `LLM_PROVIDER=nebius` |
 | `NEBIUS_API_BASE` | `https://api.tokenfactory.nebius.com/v1/` | Nebius OpenAI-compatible endpoint |
 | `RATING_PROVIDER` | `llm_synthetic` | `llm_synthetic` (default, no key needed) · `tripadvisor` · `tavily_enrichment` |
-| `ACTIVITY_PROVIDER` | `osm` | `osm` (default, no key needed) · `tavily` |
+| `ACTIVITY_PROVIDER` | `osm` | `osm` (default, no key needed) · `tavily` · `finetuned` (local Qwen3-1.7B, requires `FINETUNED_MODEL_PATH`) |
+| `FINETUNED_MODEL_PATH` | `./models/intent` | Path to merged fine-tuned model weights (only used when `ACTIVITY_PROVIDER=finetuned`) |
 | `TAVILY_API_KEY` | — | Required for `ACTIVITY_PROVIDER=tavily` and eval Run 2/3/5 |
 | `TRIPADVISOR_API_KEY` | — | Required for `RATING_PROVIDER=tripadvisor` and eval Run 4/5 |
 
@@ -135,6 +136,54 @@ graph LR
 ---
 
 ## Evaluation
+
+### Week 5: Fine-tuned Intent Classifier
+
+Replaces the 15-keyword substring bag (`_infer_activities_from_text`) with a fine-tuned **Qwen3-1.7B** model that understands natural language intent — catching queries the keyword bag silently misses.
+
+**Problem:** queries like `"somewhere with a waterfall"`, `"rollercoasters and theme parks"`, or `"wine country tour"` return `activities=[]` from keyword matching, so `select_pois_for_day` never runs and the itinerary falls back to generic scenic stops.
+
+**Solution:** 820 ShareGPT training examples generated via Claude Haiku, fine-tuned locally on M3 Max using LLaMA-Factory 0.9.3 (LoRA rank 8, 3 epochs, PyTorch 2.8.0 MPS). Final adapter loss: 0.32.
+
+**Eval — 21 golden queries across 3 tiers** (`eval/intent_eval_golden.py`):
+
+| Tier | Baseline (keyword bag) | Fine-tuned (Qwen3-1.7B) | Delta |
+|---|---|---|---|
+| Tier 1 — Easy (keyword bag should handle) | 4/5 (80%) | 4/5 (80%) | 0 |
+| **Tier 2 — Semantic gap (key metric)** | **3/10 (30%)** | **9/10 (90%)** | **+6** |
+| Tier 3 — Multi-label | 4/6 (67%) | 1/6 (17%) | −3 (expected: 85% single-label training data) |
+
+**Headline:** `"rollercoasters and theme parks"` → keyword bag returns `picnic` (substring "park"), fine-tuned returns `kids`. That single example explains the whole project.
+
+**Run the eval:**
+```bash
+# Regenerate merged model if models/intent/ is missing after a fresh clone
+llamafactory-cli export config/export_intent_classifier.yaml
+
+# Baseline vs fine-tuned comparison (21 queries, ~5s on MPS)
+FINETUNED_MODEL_PATH=./models/intent python3 eval/intent_eval_golden.py
+
+# Smoke test in the app
+ACTIVITY_PROVIDER=finetuned FINETUNED_MODEL_PATH=./models/intent streamlit run app.py
+```
+
+**Assets committed:**
+| File | What it is |
+|---|---|
+| `models/intent_adapter/` | LoRA adapter weights (33 MB, final loss 0.32) |
+| `models/intent_adapter/training_loss.png` | Loss curve (3 epochs) |
+| `data/intent_train.json` / `intent_val.json` | 656 train / 164 val ShareGPT examples |
+| `scripts/generate_intent_training_data.py` | 820-example generator via Claude Haiku |
+| `config/train_intent_classifier.yaml` | LLaMA-Factory LoRA config (rank 8, MPS) |
+| `config/export_intent_classifier.yaml` | Merges adapter → `./models/intent/` |
+| `routeiq/activities/finetuned_classifier.py` | `QueryIntentClassifier` — lazy-loads model, MPS/CUDA/CPU auto-detect |
+| `eval/intent_eval_golden.py` | 3-tier golden eval with baseline comparison |
+
+> **Note:** The merged model (`./models/intent/`, 6.7 GB) is excluded from git. Regenerate with `llamafactory-cli export config/export_intent_classifier.yaml`.
+
+See [docs/DayTripPlanner/week5-submission.md](docs/DayTripPlanner/week5-submission.md) for the full write-up: problem, training data, iterations, and known gaps.
+
+---
 
 ### Week 2: GraphRAG vs. Vector Baseline (Route Planner)
 GraphRAG vs. vector-only comparison (10 queries) — see [docs/RoutePlanner/README.md](docs/RoutePlanner/README.md) for methodology and results.
@@ -297,6 +346,7 @@ routeiq/
     factory.py                ActivityClassifierFactory — selects provider from env var
     osm_classifier.py         OSM-tag-based activity classifier (offline)
     tavily_classifier.py      Tavily web-search activity classifier (richer coverage)
+    finetuned_classifier.py   QueryIntentClassifier — fine-tuned Qwen3-1.7B intent classifier (ACTIVITY_PROVIDER=finetuned)
     ranker.py                 ActivityRanker — two-track merge of activity + scenic POIs
   routing/
     detour_scorer.py          Straight-line detour cost per POI (Strategy)
@@ -341,6 +391,7 @@ docs/
 
 | File | Contents |
 |---|---|
+| [docs/DayTripPlanner/week5-submission.md](docs/DayTripPlanner/week5-submission.md) | Week 5 fine-tuned intent classifier — problem, training data, LLaMA-Factory workflow, eval results, known gaps |
 | [docs/DayTripPlanner/architecture.md](docs/DayTripPlanner/architecture.md) | DayTripPlanner agent architecture — LangGraph ReAct loop, tools, human-in-the-loop, Week 3→4 evolution |
 | [docs/DayTripPlanner/activity-flow.md](docs/DayTripPlanner/activity-flow.md) | Activity pipeline walkthrough — classify → rank → select → enrich → context → narrate |
 | [docs/DayTripPlanner/data-flows.md](docs/DayTripPlanner/data-flows.md) | End-to-end data flows for 4 scenarios: no activities, OSM, Tavily, edge case |
