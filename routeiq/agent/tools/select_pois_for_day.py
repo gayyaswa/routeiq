@@ -66,4 +66,16 @@ def select_pois_for_day(
         entry["track"] = "activity" if c.matched_activities else "scenic"
         results.append(entry)
 
+    n_activity = sum(1 for r in results if r["track"] == "activity")
+    if n_activity == 0 and requested_activities:
+        # Signal to the LLM that no activity-specific POIs exist so it accepts scenic fills
+        # and does not retry with find_city_pois or repeat rate_pois.
+        note = (
+            f"NOTE: No POIs found specifically for {', '.join(requested_activities)} in {city}. "
+            f"Returning {len(results)} top-rated scenic alternatives instead. "
+            f"Call rate_pois ONCE on the 'pois' array below, then stop — do not call "
+            f"find_city_pois or repeat rate_pois."
+        )
+        return json.dumps({"_note": note, "pois": results})
+
     return json.dumps(results)

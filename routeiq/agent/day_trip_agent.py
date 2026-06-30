@@ -332,6 +332,36 @@ def _backfill_images(stops: list[dict]) -> None:
         list(pool.map(_fetch_one, needs_image))
 
 
+# ── Anthropic extraction helper ───────────────────────────────────────────────
+
+def _extract_itinerary_anthropic(llm, messages: list) -> "DayTripItinerary":
+    """Extract a DayTripItinerary via raw llm.invoke() + manual JSON parse.
+
+    with_structured_output tool-calling causes Claude to omit the stops array
+    (treats it as an optional arg). Embedding the schema in a system message and
+    parsing the raw text response is reliable regardless of response size.
+    """
+    import json as _json
+    import re as _re
+    from langchain_core.messages import SystemMessage
+
+    schema = DayTripItinerary.model_json_schema()
+    system_content = (
+        "Output ONLY a valid JSON object — no explanation, no markdown code fences, "
+        "no preamble. The JSON must exactly match this schema:\n\n"
+        f"{_json.dumps(schema, indent=2)}\n\n"
+        "The 'stops' array is REQUIRED. Include every stop from the tool results."
+    )
+    # Default max_tokens for ChatAnthropic is 1024 — too small for 8-10 stops of JSON.
+    response = llm.bind(max_tokens=8192).invoke([SystemMessage(content=system_content)] + list(messages))
+    text = (response.content or "").strip()
+    # Strip markdown fences if Claude wraps its output
+    if "```" in text:
+        text = _re.sub(r"```(?:json)?\n?", "", text).strip().rstrip("`").strip()
+    data = _json.loads(text)
+    return DayTripItinerary(**data)
+
+
 # ── Graph nodes ───────────────────────────────────────────────────────────────
 
 def _plan(state: DayTripState, config: Optional[RunnableConfig] = None) -> dict:
@@ -379,6 +409,7 @@ def _plan(state: DayTripState, config: Optional[RunnableConfig] = None) -> dict:
     from routeiq.timing import log as _tlog, clear as _tclear
     _tclear()
     max_iterations = 6
+    _rate_pois_calls = 0  # guard against the LLM retrying rate_pois when no activity POIs found
     _iter_t0 = time.perf_counter()
     for iteration in range(max_iterations):
         _llm_t0 = time.perf_counter()
@@ -419,6 +450,25 @@ def _plan(state: DayTripState, config: Optional[RunnableConfig] = None) -> dict:
         _tlog(f"iter={iteration} llm_think={_llm_elapsed:.2f}s tools={tool_names}")
         logger.debug("ReAct loop iter=%d tools=%s", iteration, tool_names)
 
+        # Guard: stop if the LLM keeps calling rate_pois after it already ran once.
+        # Happens when select_pois_for_day returns scenic fills (no activity match) and
+        # the LLM retries hoping for different results — causes max_iterations exhaust.
+        if "rate_pois" in tool_names and _rate_pois_calls >= 1:
+            logger.warning(
+                "ReAct loop iter=%d rate_pois called again (total=%d) — injecting stop nudge",
+                iteration, _rate_pois_calls + 1,
+            )
+            messages.pop()  # discard the duplicate tool-call response
+            messages.append(HumanMessage(content=(
+                "rate_pois has already run. You have the rated POIs in the previous tool result. "
+                "Do NOT call rate_pois, find_city_pois, or select_pois_for_day again. "
+                "Stop calling tools — the itinerary builder will handle the rest."
+            )))
+            break
+
+        if "rate_pois" in tool_names:
+            _rate_pois_calls += 1
+
         # Emit progress for the first tool in each iteration
         if thread_id and tool_names:
             step = _TOOL_TO_STEP.get(tool_names[0], "find_pois")
@@ -436,6 +486,8 @@ def _plan(state: DayTripState, config: Optional[RunnableConfig] = None) -> dict:
             if isinstance(msg, ToolMessage) and msg.name == "select_pois_for_day":
                 try:
                     stops_data = json.loads(msg.content)
+                    if isinstance(stops_data, dict):
+                        stops_data = stops_data.get("pois", [])
                     for s in (stops_data if isinstance(stops_data, list) else []):
                         covered.update(s.get("matched_activities") or [])
                 except Exception:
@@ -455,8 +507,21 @@ def _plan(state: DayTripState, config: Optional[RunnableConfig] = None) -> dict:
     if thread_id:
         _emit_progress(thread_id, "extract", "Structuring itinerary…")
 
+    def _extract_tool_content(msg: ToolMessage) -> str:
+        """Unwrap {_note, pois} envelope from select_pois_for_day before extraction.
+        The _note is a ReAct-loop hint only — it misleads the extraction LLM."""
+        content = msg.content
+        if msg.name == "select_pois_for_day":
+            try:
+                parsed = json.loads(content)
+                if isinstance(parsed, dict) and "pois" in parsed:
+                    content = json.dumps(parsed["pois"])
+            except Exception:
+                pass
+        return content
+
     tool_context = "\n\n---\n\n".join(
-        msg.content for msg in messages if isinstance(msg, ToolMessage)
+        _extract_tool_content(msg) for msg in messages if isinstance(msg, ToolMessage)
     ) or "No tool results available."
 
     # Carry refinement feedback into the extraction prompt so the LLM applies it.
@@ -479,8 +544,13 @@ def _plan(state: DayTripState, config: Optional[RunnableConfig] = None) -> dict:
         f"and exclude any stop types the user wants removed.\n"
     ) if refinement_feedback else ""
 
+    # Directive phrasing for extraction — "couldn't find X" causes Claude to omit stops.
+    # Tell the model what to DO with the available POIs instead of what was missing.
     fallback_note_str = (
-        f"\nActivity note: {activity_fallback_note}\n" if activity_fallback_note else ""
+        f"\nNote: The requested activity was not available in {state['city']}. "
+        f"The rate_pois tool results contain the top-rated scenic POIs — "
+        f"use them to build all 8-10 stops.\n"
+        if activity_fallback_note else ""
     )
     extraction_messages = [
         HumanMessage(content=(
@@ -510,11 +580,15 @@ def _plan(state: DayTripState, config: Optional[RunnableConfig] = None) -> dict:
         ))
     ]
 
+    import os as _os
     itinerary: DayTripItinerary | None = None
     for _attempt in range(2):
         try:
-            structured_llm = llm.with_structured_output(DayTripItinerary)
-            itinerary = structured_llm.invoke(extraction_messages)
+            if _os.environ.get("LLM_PROVIDER", "anthropic").lower() == "anthropic":
+                itinerary = _extract_itinerary_anthropic(llm, extraction_messages)
+            else:
+                structured_llm = llm.with_structured_output(DayTripItinerary)
+                itinerary = structured_llm.invoke(extraction_messages)
             break
         except Exception as _exc:
             logger.warning("Structured extraction attempt %d failed: %s", _attempt + 1, _exc)

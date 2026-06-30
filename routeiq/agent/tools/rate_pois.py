@@ -93,7 +93,10 @@ def rate_pois(city: str, poi_list_json: str, config: RunnableConfig) -> str:
     """
     from routeiq.timing import log as _tlog
 
-    raw: list[dict] = json.loads(poi_list_json)
+    _raw = json.loads(poi_list_json)
+    # Unwrap the {_note, pois} envelope returned by select_pois_for_day when no
+    # activity-matched POIs were found — rate_pois only needs the pois list.
+    raw: list[dict] = _raw.get("pois", []) if isinstance(_raw, dict) else _raw
     fields = _poi_fields()
     pois = [POI(**{k: v for k, v in d.items() if k in fields}) for d in raw]
     extra_by_name: dict[str, dict] = {
