@@ -10,32 +10,13 @@ import osmnx as ox
 from shapely.geometry import LineString, Point
 from routeiq.graph.poi import POI
 from routeiq.graph.graph_loader import _OVERPASS_ENDPOINTS
+from routeiq.graph.osm_tags import OSM_TAGS, GENERIC_VALUES, LEISURE_CATEGORY, AMENITY_CATEGORY
 
 _PER_MIRROR_TIMEOUT = 30  # hard wall-clock limit per Overpass attempt, independent of OSMnx retry logic
 
 # Pre-seeded Bay Area master POI file — committed to repo.
 # When present, POIFinder skips Overpass entirely and does in-memory spatial filtering.
 _MASTER_FILE = "bay_area_all.json.gz"
-
-# Tag filters — must stay in sync with scripts/seed_poi_cache.py
-_SCENIC_TOURISM = [
-    "viewpoint", "museum", "attraction", "aquarium", "zoo",
-    "theme_park", "lighthouse", "monument", "winery",
-]
-_SCENIC_HISTORIC = [
-    "castle", "fort", "monument", "memorial", "ruins",
-    "archaeological_site", "lighthouse", "manor", "battlefield",
-]
-_SCENIC_NATURAL = [
-    "peak", "volcano", "beach", "cape", "cliff", "waterfall",
-    "hot_spring", "cave_entrance", "bay", "glacier", "wood",
-]
-_TAGS = {
-    "tourism": _SCENIC_TOURISM,
-    "historic": _SCENIC_HISTORIC,
-    "natural": _SCENIC_NATURAL,
-}
-_GENERIC_VALUES = {"yes", "no", "true", "false", "tourism", "historic", "natural"}
 
 
 class OverpassUnavailableError(Exception):
@@ -207,7 +188,7 @@ class POIFinder:
             def _fetch(m=mirror, rh=result_holder, eh=error_holder):
                 try:
                     ox.settings.overpass_url = m
-                    rh[0] = ox.features_from_bbox(bbox=(minx, miny, maxx, maxy), tags=_TAGS)
+                    rh[0] = ox.features_from_bbox(bbox=(minx, miny, maxx, maxy), tags=OSM_TAGS)
                 except Exception as exc:
                     eh[0] = exc
 
@@ -243,7 +224,7 @@ class POIFinder:
             if pd.isna(name):
                 continue
             name = str(name).strip()
-            if len(name) < 3 or name.lower() in _GENERIC_VALUES:
+            if len(name) < 3 or name.lower() in GENERIC_VALUES:
                 continue
 
             geom = row.geometry
@@ -258,6 +239,12 @@ class POIFinder:
                 category, subtype = "tourism", str(row.get("tourism"))
             elif pd.notna(row.get("natural")):
                 category, subtype = "natural", str(row.get("natural"))
+            elif pd.notna(row.get("leisure")):
+                subtype = str(row.get("leisure"))
+                category = LEISURE_CATEGORY.get(subtype, "tourism")
+            elif pd.notna(row.get("amenity")):
+                subtype = str(row.get("amenity"))
+                category = AMENITY_CATEGORY.get(subtype, "tourism")
             else:
                 continue
 

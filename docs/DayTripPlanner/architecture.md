@@ -369,7 +369,8 @@ Plan time: ~56s → ~36s total react time for SF swimming.
 ```
 routeiq/activities/
   base.py              ActivityClassifier ABC — classify_batch(city, pois, activities) → list[ClassifiedPOI]
-  osm_classifier.py    OSMActivityClassifier — tag lookup, zero latency, zero API calls
+  osm_classifier.py    OSMActivityClassifier — 9 activity types (hiking, biking, swimming, kayaking,
+                       kids, picnic, history, food, scenic); tag lookup, zero latency, zero API calls
   tavily_classifier.py TavilyActivityClassifier — web search + LLM extraction
   ranker.py            ActivityRanker — semantic + scored ranking strategies
   factory.py           create_activity_classifier(ACTIVITY_PROVIDER), create_ranker()

@@ -77,9 +77,13 @@ _TAG_DESCRIPTIONS: dict[str, str] = {
     ),
     "food": (
         "wineries, breweries, food markets, farm stands, tasting rooms, foodie destinations, "
-        "restaurant districts, culinary tours, craft beer. Include indirect phrasings like "
+        "restaurant districts, culinary tours, craft beer, bars, pubs, nightclubs, cocktail bars, "
+        "rooftop bars, live music venues, nightlife districts, bar hopping, jazz clubs, "
+        "speakeasies, brewery tours. Include indirect phrasings like "
         "'wine country tour', 'brewery district', 'somewhere with local food', "
-        "'tasting experiences', 'farm to table'."
+        "'tasting experiences', 'farm to table', 'nightlife and bar hopping', "
+        "'cocktails and rooftop bars', 'live music venue', 'club night out', "
+        "'brewery tour and craft beer', 'wine bar evening', 'jazz club and dinner'."
     ),
     "scenic": (
         "overlooks, viewpoints, coastal vistas, scenic drives, panoramic views, "

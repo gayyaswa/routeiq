@@ -1,25 +1,11 @@
 from __future__ import annotations
 from routeiq.activities.base import ClassifiedPOI
 from routeiq.activities.ranker import ActivityRanker, create_ranker
-
-# Mirrors _SCENIC_SCORE in poi_selector.py — same tier values.
-_SCENIC_SCORE: dict[str, int] = {
-    "waterfall": 9, "volcano": 9, "beach": 9, "cape": 9,
-    "peak": 8, "cliff": 8, "glacier": 8, "hot_spring": 8,
-    "bay": 7, "cave_entrance": 7, "wood": 6,
-    "viewpoint": 9, "lighthouse": 8,
-    "attraction": 7, "museum": 6, "winery": 6,
-    "aquarium": 6, "zoo": 5, "theme_park": 5,
-    "monument": 4,
-    "castle": 8, "fort": 7, "ruins": 7, "archaeological_site": 7,
-    "manor": 6, "battlefield": 6,
-    "memorial": 3,
-}
-_DEFAULT_SCENIC = 5
+from routeiq.routing.scenic_scores import get_scenic_score
 
 
 def _scenic_score(c: ClassifiedPOI) -> int:
-    return _SCENIC_SCORE.get(c.poi.subtype or "", _DEFAULT_SCENIC)
+    return get_scenic_score(c.poi.subtype)
 
 
 def _slots_for_activity(candidates: list) -> int:
@@ -78,7 +64,9 @@ class ActivityPOISelector:
                 act: _slots_for_activity(candidates_by_activity[act])
                 for act in requested_activities
             }
-            per_activity_slots = _scale_slots_proportional(raw_slots, max(1, total_stops - 1))
+            # Cap activity slots at 2 total so scenic fills dominate the itinerary.
+            activity_budget = min(2, max(1, total_stops - 1))
+            per_activity_slots = _scale_slots_proportional(raw_slots, activity_budget)
         else:
             per_activity_slots = {}
 
@@ -129,7 +117,9 @@ class ActivityPOISelector:
         self, classified_pois, used_ids: set[str], n_slots: int
     ) -> list[ClassifiedPOI]:
         remaining = [c for c in classified_pois if c.poi.osm_id not in used_ids]
-        remaining.sort(key=_scenic_score, reverse=True)
+        # Sort by (wikipedia notability, scenic tier) so fills are the most visited/notable
+        # POIs from the city pool, not just the best OSM subtype tier.
+        remaining.sort(key=lambda c: (0 if c.poi.wikipedia_tag else 1, -_scenic_score(c)))
         return remaining[:n_slots]
 
     def _order_by_geography(self, stops: list[ClassifiedPOI]) -> list[ClassifiedPOI]:

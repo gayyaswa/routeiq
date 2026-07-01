@@ -36,6 +36,7 @@ import pandas as pd
 import osmnx as ox
 
 from routeiq.graph.poi import POI
+from routeiq.graph.osm_tags import OSM_TAGS, GENERIC_VALUES, LEISURE_CATEGORY, AMENITY_CATEGORY
 
 _CACHE_DIR = "./cache/pois"
 _MASTER_FILE = os.path.join(_CACHE_DIR, "bay_area_all.json.gz")
@@ -45,23 +46,6 @@ _BAY_AREA_NORTH = 39.0
 _BAY_AREA_SOUTH = 36.5
 _BAY_AREA_EAST = -120.5
 _BAY_AREA_WEST = -123.5
-
-# Must stay in sync with POIFinder._TAGS
-_TAGS = {
-    "tourism": [
-        "viewpoint", "museum", "attraction", "aquarium", "zoo",
-        "theme_park", "lighthouse", "monument", "winery",
-    ],
-    "historic": [
-        "castle", "fort", "monument", "memorial", "ruins",
-        "archaeological_site", "lighthouse", "manor", "battlefield",
-    ],
-    "natural": [
-        "peak", "volcano", "beach", "cape", "cliff", "waterfall",
-        "hot_spring", "cave_entrance", "bay", "glacier", "wood",
-    ],
-}
-_GENERIC_VALUES = {"yes", "no", "true", "false", "tourism", "historic", "natural"}
 
 # Smaller tiles sized to stay under 60s per Overpass query.
 # Covers all 5 demo route corridors: SF→Muir Woods, SF→Napa, SJ→Santa Cruz,
@@ -156,7 +140,7 @@ def _gdf_to_pois(gdf) -> list[POI]:
         if pd.isna(name):
             continue
         name = str(name).strip()
-        if len(name) < 3 or name.lower() in _GENERIC_VALUES:
+        if len(name) < 3 or name.lower() in GENERIC_VALUES:
             continue
 
         geom = row.geometry
@@ -168,6 +152,12 @@ def _gdf_to_pois(gdf) -> list[POI]:
             category, subtype = "tourism", str(row.get("tourism"))
         elif pd.notna(row.get("natural")):
             category, subtype = "natural", str(row.get("natural"))
+        elif pd.notna(row.get("leisure")):
+            subtype = str(row.get("leisure"))
+            category = LEISURE_CATEGORY.get(subtype, "tourism")
+        elif pd.notna(row.get("amenity")):
+            subtype = str(row.get("amenity"))
+            category = AMENITY_CATEGORY.get(subtype, "tourism")
         else:
             continue
 
@@ -197,7 +187,7 @@ def _fetch_tile(west: float, south: float, east: float, north: float) -> object:
         ox.settings.overpass_settings = "[out:json][timeout:85]"
         try:
             t0 = time.perf_counter()
-            gdf = ox.features_from_bbox(bbox=(west, south, east, north), tags=_TAGS)
+            gdf = ox.features_from_bbox(bbox=(west, south, east, north), tags=OSM_TAGS)
             print(f"    {mirror}: {time.perf_counter()-t0:.1f}s → {len(gdf)} rows", flush=True)
             return gdf
         except Exception as e:

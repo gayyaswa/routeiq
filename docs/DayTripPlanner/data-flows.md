@@ -335,11 +335,13 @@ On a same-session refinement: **<0.1s** for rating (Layer 1 state hit).
 ## What each provider adds over the previous
 
 ```
-OSM classifier alone
-  → catches POIs with explicit activity tags (leisure=cycling_path, amenity=playground)
+OSM classifier alone  (9 activity types: hiking, biking, swimming, kayaking, kids, picnic,
+                       history, food, scenic)
+  → catches POIs with explicit activity tags (leisure=cycling_path, amenity=playground,
+    tourism=museum→history, amenity=bar→food, tourism=viewpoint→scenic)
   → misses: Academy of Sciences for kids, Crissy Field for hiking (no matching OSM tag)
-  → false negative rate: high for activity-tagged POIs with generic OSM categories
-  → zero API cost; good as a baseline and fallback
+  → false negative rate: moderate for activity-tagged POIs with generic OSM categories
+  → zero API cost; covers the 9 activity types without any network calls
 
 + Tavily
   → adds web evidence: "hiking in San Francisco" returns Crissy Field, Marin Headlands

@@ -10,9 +10,6 @@ CATEGORIES = [
     {"name": "historic"},
     {"name": "natural"},
     {"name": "tourism"},
-    {"name": "winery"},
-    {"name": "state_park"},
-    {"name": "mission"},
 ]
 
 REGIONS = [
@@ -104,6 +101,26 @@ def _nearest_city(lat: float, lon: float) -> str:
     return best
 
 
+def _notability_sort_key(p: dict) -> tuple:
+    """Sort key: en:wikipedia first, then other wiki, then no wiki; subtype tier within each group."""
+    from routeiq.routing.scenic_scores import SUBTYPE_TIER
+    wiki = p.get("wikipedia_tag") or ""
+    wiki_rank = 0 if wiki.startswith("en:") else (1 if wiki else 2)
+    return (wiki_rank, SUBTYPE_TIER.get(p.get("subtype") or "", 6))
+
+
+def _dedup_and_sort(pois: list[dict]) -> list[dict]:
+    """Deduplicate by name (keep first osm_id) then sort by notability."""
+    seen_names: set[str] = set()
+    deduped: list[dict] = []
+    for p in pois:
+        if p["name"] not in seen_names:
+            seen_names.add(p["name"])
+            deduped.append(p)
+    deduped.sort(key=_notability_sort_key)
+    return deduped
+
+
 def _load_bay_area_pois() -> list[dict]:
     """Load OSM-verified notable Bay Area POIs from master cache; fallback to anchors."""
     master = Path(__file__).parent.parent.parent / "cache" / "pois" / "bay_area_all.json.gz"
@@ -138,7 +155,7 @@ def _load_bay_area_pois() -> list[dict]:
             "region": _CITY_REGIONS.get(city, "Bay Area"),
             "wikipedia_tag": p.get("wikipedia_tag"),
         })
-    return pois
+    return _dedup_and_sort(pois)
 
 
 def _load_nyc_pois() -> list[dict]:
@@ -175,7 +192,7 @@ def _load_nyc_pois() -> list[dict]:
                 "region": _NYC_CITY_REGIONS.get(city, "New York City"),
                 "wikipedia_tag": p.get("wikipedia_tag"),
             })
-    return pois
+    return _dedup_and_sort(pois)
 
 
 POIS = _load_bay_area_pois() + _load_nyc_pois()

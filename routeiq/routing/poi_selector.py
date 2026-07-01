@@ -1,32 +1,13 @@
 from __future__ import annotations
 import math
 from routeiq.routing.scored_poi import ScoredPOI
+from routeiq.routing.scenic_scores import get_scenic_score
 
 DEFAULT_TOP_N = 5
 # Minimum straight-line distance between any two selected POIs.
 # Prevents the selector from filling all N slots with monuments from the
 # same city block when the route passes through a dense urban area.
 _MIN_SPREAD_KM = 2.0
-
-# Experiential/scenic value per OSM subtype.
-# Used as tier-2 sort key so a dramatic viewpoint beats a dull memorial
-# even when they have the same detour cost.
-_SCENIC_SCORE: dict[str, int] = {
-    # natural — landscapes and geological features
-    "waterfall": 9, "volcano": 9, "beach": 9, "cape": 9,
-    "peak": 8, "cliff": 8, "glacier": 8, "hot_spring": 8,
-    "bay": 7, "cave_entrance": 7, "wood": 6,
-    # tourism — experiential destinations
-    "viewpoint": 9, "lighthouse": 8,
-    "attraction": 7, "museum": 6, "winery": 6,
-    "aquarium": 6, "zoo": 5, "theme_park": 5,
-    "monument": 4,
-    # historic — built heritage
-    "castle": 8, "fort": 7, "ruins": 7, "archaeological_site": 7,
-    "manor": 6, "battlefield": 6,
-    "memorial": 3,
-}
-_DEFAULT_SCENIC = 5
 
 
 def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -39,7 +20,7 @@ def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 
 def _scenic(sp: ScoredPOI) -> int:
-    return _SCENIC_SCORE.get(sp.poi.subtype or "", _DEFAULT_SCENIC)
+    return get_scenic_score(sp.poi.subtype)
 
 
 class POISelector:

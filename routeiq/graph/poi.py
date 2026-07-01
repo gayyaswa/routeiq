@@ -15,3 +15,4 @@ class POI:
     image_url: str | None = None      # Wikipedia thumbnail, populated on Day 3
     description: str | None = None   # Wikipedia extract, populated on Day 3
     subtype: str | None = None        # OSM value: "viewpoint", "beach", "fort", etc.
+    scenic_score: float | None = None  # 0–1 scenic rank signal set by POIFinder/scorer

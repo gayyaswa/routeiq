@@ -27,7 +27,7 @@ streamlit run app.py
 | `NEBIUS_API_KEY` | — | Required when `LLM_PROVIDER=nebius` |
 | `NEBIUS_API_BASE` | `https://api.tokenfactory.nebius.com/v1/` | Nebius OpenAI-compatible endpoint |
 | `RATING_PROVIDER` | `llm_synthetic` | `llm_synthetic` (default, no key needed) · `tripadvisor` · `tavily_enrichment` |
-| `ACTIVITY_PROVIDER` | `osm` | `osm` (default, no key needed) · `tavily` · `finetuned` (local Qwen3-1.7B, requires `FINETUNED_MODEL_PATH`) |
+| `ACTIVITY_PROVIDER` | `osm` | `osm` (default, no key needed, 9 activity types) · `tavily` · `finetuned` (local Qwen3-1.7B, requires `FINETUNED_MODEL_PATH`) |
 | `FINETUNED_MODEL_PATH` | `./models/intent` | Path to merged fine-tuned model weights (only used when `ACTIVITY_PROVIDER=finetuned`) |
 | `TAVILY_API_KEY` | — | Required for `ACTIVITY_PROVIDER=tavily` and eval Run 2/3/5 |
 | `TRIPADVISOR_API_KEY` | — | Required for `RATING_PROVIDER=tripadvisor` and eval Run 4/5 |
@@ -144,6 +144,8 @@ Replaces the 15-keyword substring bag (`_infer_activities_from_text`) with a fin
 **Problem:** queries like `"somewhere with a waterfall"`, `"rollercoasters and theme parks"`, or `"wine country tour"` return `activities=[]` from keyword matching, so `select_pois_for_day` never runs and the itinerary falls back to generic scenic stops.
 
 **Solution:** 820 ShareGPT training examples generated via Claude Haiku, fine-tuned locally on M3 Max using LLaMA-Factory 0.9.3 (LoRA rank 8, 3 epochs, PyTorch 2.8.0 MPS). Final adapter loss: 0.32.
+
+**Retraining — nightlife expansion (post-Week 5):** The `food` training data was expanded to include nightlife phrasings (cocktail bars, rooftop bars, live music venues, nightclubs, brewery tours, jazz clubs, speakeasies). The `generate_intent_training_data.py` description for `food` now covers the full bar/nightlife/live music space — not just wineries and breweries. The OSM classifier was also extended from 6 → 9 activity types, adding `history`, `food`, and `scenic` (museum→history, nightclub→food, viewpoint→scenic) so the free offline baseline handles the same breadth as the fine-tuned model.
 
 **Eval — 21 golden queries across 3 tiers** (`eval/intent_eval_golden.py`):
 

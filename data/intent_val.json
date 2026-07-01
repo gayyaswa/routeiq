@@ -7,7 +7,7 @@
       },
       {
         "from": "human",
-        "value": "Find me beginner-friendly cycling paths where I can take the kids"
+        "value": "best road cycling routes for experienced riders, going with my partner"
       },
       {
         "from": "gpt",
@@ -23,7 +23,7 @@
       },
       {
         "from": "human",
-        "value": "what are the top viewpoints for mountain views in this area?"
+        "value": "show me scenic drives with amazing views in my area"
       },
       {
         "from": "gpt",
@@ -39,7 +39,7 @@
       },
       {
         "from": "human",
-        "value": "I'm craving ocean air and want to jump in the waves"
+        "value": "somewhere I can escape and get properly wet today"
       },
       {
         "from": "gpt",
@@ -55,7 +55,7 @@
       },
       {
         "from": "human",
-        "value": "mountain overlook recommendations for this weekend"
+        "value": "I need a spot with killer coastal vistas for photos"
       },
       {
         "from": "gpt",
@@ -71,7 +71,7 @@
       },
       {
         "from": "human",
-        "value": "Can I find places to paddleboard around here?"
+        "value": "Need suggestions for water sports that aren't too intense or dangerous"
       },
       {
         "from": "gpt",
@@ -87,7 +87,7 @@
       },
       {
         "from": "human",
-        "value": "something on a kayak would be perfect for my day trip"
+        "value": "I'm looking for something on a kayak with calm water"
       },
       {
         "from": "gpt",
@@ -103,7 +103,7 @@
       },
       {
         "from": "human",
-        "value": "best historic battlefields to visit near gettysburg pennsylvania"
+        "value": "fun historical day trips from Philadelphia battlefields and mission sites"
       },
       {
         "from": "gpt",
@@ -119,7 +119,7 @@
       },
       {
         "from": "human",
-        "value": "I'm looking for a day trip with stunning overlooks and panoramic views nearby."
+        "value": "I'm looking for a day trip with overlooks and panoramic views nearby."
       },
       {
         "from": "gpt",
@@ -135,7 +135,7 @@
       },
       {
         "from": "human",
-        "value": "Something fun for the little ones that won't take all day to drive to"
+        "value": "children's museums and interactive exhibits near me for a day trip"
       },
       {
         "from": "gpt",
@@ -151,7 +151,7 @@
       },
       {
         "from": "human",
-        "value": "i want to do something"
+        "value": "i need to get out"
       },
       {
         "from": "gpt",
@@ -167,7 +167,7 @@
       },
       {
         "from": "human",
-        "value": "rock climbing spots in nature"
+        "value": "peaceful woods for a walk"
       },
       {
         "from": "gpt",
@@ -183,7 +183,7 @@
       },
       {
         "from": "human",
-        "value": "what's fun nearby"
+        "value": "plan something fun"
       },
       {
         "from": "gpt",
@@ -199,7 +199,7 @@
       },
       {
         "from": "human",
-        "value": "trails near me today"
+        "value": "scenic trails near me today"
       },
       {
         "from": "gpt",
@@ -215,7 +215,7 @@
       },
       {
         "from": "human",
-        "value": "where's the best panoramic view around here"
+        "value": "panoramic overlook recommendations for today"
       },
       {
         "from": "gpt",
@@ -231,7 +231,7 @@
       },
       {
         "from": "human",
-        "value": "I want to see the redwoods, what's closest?"
+        "value": "Looking for a bouldering spot within an hour drive"
       },
       {
         "from": "gpt",
@@ -247,7 +247,7 @@
       },
       {
         "from": "human",
-        "value": "I'd like recommendations for peaceful forest hikes with minimal crowds."
+        "value": "Can you suggest a day trip to a place known for challenging mountain peaks?"
       },
       {
         "from": "gpt",
@@ -263,7 +263,7 @@
       },
       {
         "from": "human",
-        "value": "Ocean swimming spots close by - want to take the family"
+        "value": "Looking for a pool or beach to get in the water with my partner"
       },
       {
         "from": "gpt",
@@ -279,7 +279,7 @@
       },
       {
         "from": "human",
-        "value": "Find me a scenic drive route with multiple stops for breathtaking views."
+        "value": "Best places to see a sunset over the ocean today?"
       },
       {
         "from": "gpt",
@@ -295,7 +295,7 @@
       },
       {
         "from": "human",
-        "value": "What are good lake destinations within an hour's drive?"
+        "value": "can you recommend somewhere I can take a dip without traveling too far"
       },
       {
         "from": "gpt",
@@ -311,7 +311,7 @@
       },
       {
         "from": "human",
-        "value": "Suggest a day trip to explore local wineries, orchards, and seasonal produce stands."
+        "value": "Can you plan a jazz club evening with dinner recommendations?"
       },
       {
         "from": "gpt",
@@ -327,7 +327,7 @@
       },
       {
         "from": "human",
-        "value": "Show me farm to table restaurants in the area"
+        "value": "What's the best brewery district for a day trip?"
       },
       {
         "from": "gpt",
@@ -343,7 +343,7 @@
       },
       {
         "from": "human",
-        "value": "Show me somewhere with waterfalls my partner would love to explore"
+        "value": "best trails near me for a day trip with my partner"
       },
       {
         "from": "gpt",
@@ -359,7 +359,7 @@
       },
       {
         "from": "human",
-        "value": "Aquariums near Seattle that would keep my 4-year-old entertained for hours"
+        "value": "LEGOLAND or similar attractions within driving distance of San Diego"
       },
       {
         "from": "gpt",
@@ -375,7 +375,7 @@
       },
       {
         "from": "human",
-        "value": "Find me a lake destination where I can kayak around and then relax with a swim"
+        "value": "What's a good day trip location for both kayaking and ocean swimming?"
       },
       {
         "from": "gpt",
@@ -391,7 +391,7 @@
       },
       {
         "from": "human",
-        "value": "I want to find a place to cool off this weekend near the city"
+        "value": "I want to find a nice beach to cool off and relax by the water today"
       },
       {
         "from": "gpt",
@@ -407,7 +407,7 @@
       },
       {
         "from": "human",
-        "value": "stand up paddle boarding spots close to Seattle"
+        "value": "calm water canoeing trips central florida"
       },
       {
         "from": "gpt",
@@ -423,7 +423,7 @@
       },
       {
         "from": "human",
-        "value": "Road cycling routes through wine country in Napa Valley"
+        "value": "Road cycling routes through wine country near Napa Valley"
       },
       {
         "from": "gpt",
@@ -439,7 +439,7 @@
       },
       {
         "from": "human",
-        "value": "botanical gardens around portland oregon perfect for outdoor meals"
+        "value": "scenic spots near denver to sit and enjoy the day with food"
       },
       {
         "from": "gpt",
@@ -455,7 +455,7 @@
       },
       {
         "from": "human",
-        "value": "explore the past in charleston south carolina what should i see"
+        "value": "day trip from Washington DC to see important battlefields and heritage sites"
       },
       {
         "from": "gpt",
@@ -471,7 +471,7 @@
       },
       {
         "from": "human",
-        "value": "I want to feel the sun, breathe fresh air, and eat somewhere pretty"
+        "value": "where are the best spots to sit back, relax, and enjoy nature's company"
       },
       {
         "from": "gpt",
@@ -487,7 +487,7 @@
       },
       {
         "from": "human",
-        "value": "Looking for a morning hike followed by a zoo visit - what's available within an hour radius?"
+        "value": "Plan us a day with forest paths in the morning and a zoo visit in the afternoon"
       },
       {
         "from": "gpt",
@@ -503,7 +503,7 @@
       },
       {
         "from": "human",
-        "value": "best spots to see the views in hawaii"
+        "value": "what's the best scenic drive from Portland Oregon"
       },
       {
         "from": "gpt",
@@ -519,7 +519,7 @@
       },
       {
         "from": "human",
-        "value": "I'm looking for panoramic views, somewhere Instagram-worthy for my friends"
+        "value": "panoramic viewpoints where I can take photos with my kids"
       },
       {
         "from": "gpt",
@@ -535,7 +535,7 @@
       },
       {
         "from": "human",
-        "value": "What day trips have both a historic district to explore and forest paths or waterfalls I can hike to?"
+        "value": "Can you suggest a day trip itinerary that includes a historic site tour and a forest walk or nature trail?"
       },
       {
         "from": "gpt",
@@ -551,7 +551,7 @@
       },
       {
         "from": "human",
-        "value": "peaceful paddleboarding day trip options"
+        "value": "exploring by boat and paddle"
       },
       {
         "from": "gpt",
@@ -567,7 +567,7 @@
       },
       {
         "from": "human",
-        "value": "Scuba diving spots that are open for a day trip?"
+        "value": "Ocean swimming spots that are safe and close by?"
       },
       {
         "from": "gpt",
@@ -583,7 +583,7 @@
       },
       {
         "from": "human",
-        "value": "I want to take my kids on a waterfall hike and then grab lunch at a place with a playground nearby."
+        "value": "What's a good day trip combining scenic trails with kid-friendly attractions?"
       },
       {
         "from": "gpt",
@@ -615,7 +615,7 @@
       },
       {
         "from": "human",
-        "value": "botanical gardens for relaxing days"
+        "value": "scenic meadows for outdoor eating"
       },
       {
         "from": "gpt",
@@ -631,7 +631,7 @@
       },
       {
         "from": "human",
-        "value": "show me brewery districts near me for a day trip"
+        "value": "I want to explore somewhere with local craft breweries and tasting rooms"
       },
       {
         "from": "gpt",
@@ -647,7 +647,7 @@
       },
       {
         "from": "human",
-        "value": "Where can I explore old colonial buildings and learn about local heritage?"
+        "value": "What old towns can I visit near me for a day trip?"
       },
       {
         "from": "gpt",
@@ -663,7 +663,7 @@
       },
       {
         "from": "human",
-        "value": "what should we do"
+        "value": "suggest an outing"
       },
       {
         "from": "gpt",
@@ -679,7 +679,7 @@
       },
       {
         "from": "human",
-        "value": "where's a nice spot to take a refreshing plunge today"
+        "value": "lake recommendations where we can go for a few hours"
       },
       {
         "from": "gpt",
@@ -695,7 +695,7 @@
       },
       {
         "from": "human",
-        "value": "Show me local farm stands and farmers markets for fresh produce shopping."
+        "value": "Where can I find a farm to table experience with local ingredients?"
       },
       {
         "from": "gpt",
@@ -711,7 +711,7 @@
       },
       {
         "from": "human",
-        "value": "what museums and heritage sites are close by for my partner and me"
+        "value": "Best ancient ruins and missions to see near me for a group trip"
       },
       {
         "from": "gpt",
@@ -727,7 +727,7 @@
       },
       {
         "from": "human",
-        "value": "Can you suggest overlooks where I can watch the sunset this evening?"
+        "value": "Can you suggest scenic drives where I can stop at multiple viewpoints?"
       },
       {
         "from": "gpt",
@@ -743,7 +743,7 @@
       },
       {
         "from": "human",
-        "value": "Can you suggest mountain bike trails for me and my kids?"
+        "value": "kids want to ride bikes, need family-friendly routes nearby"
       },
       {
         "from": "gpt",
@@ -759,7 +759,7 @@
       },
       {
         "from": "human",
-        "value": "Rent bikes and ride scenic routes in the Lake District"
+        "value": "Fun bike paths for beginners in Austin Texas area"
       },
       {
         "from": "gpt",
@@ -775,7 +775,7 @@
       },
       {
         "from": "human",
-        "value": "Are there any missions or heritage sites within an hour's drive?"
+        "value": "What historic missions are worth visiting nearby?"
       },
       {
         "from": "gpt",
@@ -791,7 +791,7 @@
       },
       {
         "from": "human",
-        "value": "Where can I find a good waterfall to visit today?"
+        "value": "Where can I find a good waterfall near me for a day trip?"
       },
       {
         "from": "gpt",
@@ -807,7 +807,7 @@
       },
       {
         "from": "human",
-        "value": "cultural landmarks worth seeing"
+        "value": "cultural landmarks worth visiting today"
       },
       {
         "from": "gpt",
@@ -823,7 +823,7 @@
       },
       {
         "from": "human",
-        "value": "I need a full-day cycling tour with scenic stops and bike rental included."
+        "value": "Are there any organized bike tours departing this weekend that I should consider?"
       },
       {
         "from": "gpt",
@@ -839,7 +839,1031 @@
       },
       {
         "from": "human",
-        "value": "I'm looking for scenic cycling paths near the coast for a day trip this weekend."
+        "value": "I'm looking for scenic cycling paths suitable for a day trip near the city."
+      },
+      {
+        "from": "gpt",
+        "value": "biking"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "i want to go somewhere nice"
+      },
+      {
+        "from": "gpt",
+        "value": "none"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "Best place to rent a canoe and spend the afternoon?"
+      },
+      {
+        "from": "gpt",
+        "value": "kayaking"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "somewhere with beautiful waterfalls in the Blue Ridge Mountains"
+      },
+      {
+        "from": "gpt",
+        "value": "hiking"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "Stand-up paddle boarding spots for a day trip, any ideas?"
+      },
+      {
+        "from": "gpt",
+        "value": "kayaking"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "stand-up paddle boarding day excursion"
+      },
+      {
+        "from": "gpt",
+        "value": "kayaking"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "I'm looking for family-friendly attractions with rides and entertainment."
+      },
+      {
+        "from": "gpt",
+        "value": "kids"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "Can you suggest places where kids can enjoy both swimming and other fun activities nearby?"
+      },
+      {
+        "from": "gpt",
+        "value": "swimming, kids"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "forest walks close by that are good for Sunday morning"
+      },
+      {
+        "from": "gpt",
+        "value": "hiking"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "I'd like to explore historic sites and old town districts for my day trip."
+      },
+      {
+        "from": "gpt",
+        "value": "history"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "best theme parks near me that have rides for little ones"
+      },
+      {
+        "from": "gpt",
+        "value": "kids"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "rooftop bars and cocktails for a night out with my partner"
+      },
+      {
+        "from": "gpt",
+        "value": "food"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "I'm looking for a day trip destination with scenic trails and natural waterfalls nearby."
+      },
+      {
+        "from": "gpt",
+        "value": "hiking"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "I want to learn about the area's past, what should I see?"
+      },
+      {
+        "from": "gpt",
+        "value": "history"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "Looking for somewhere atmospheric with old buildings and stories"
+      },
+      {
+        "from": "gpt",
+        "value": "history"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "dive sites within driving distance from the city"
+      },
+      {
+        "from": "gpt",
+        "value": "swimming"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "What can we do as a family that everyone will enjoy"
+      },
+      {
+        "from": "gpt",
+        "value": "kids"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "I'd like to visit a coastal town with stunning ocean views and fresh seafood restaurants for the day"
+      },
+      {
+        "from": "gpt",
+        "value": "scenic, food"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "What pools are open this weekend?"
+      },
+      {
+        "from": "gpt",
+        "value": "swimming"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "Show me farm to table experiences within an hour's drive"
+      },
+      {
+        "from": "gpt",
+        "value": "food"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "Planning to boulder and explore natural rock formations, then relax at a coastal vista spot afterwards"
+      },
+      {
+        "from": "gpt",
+        "value": "hiking, scenic"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "Need an overlook that feels totally isolated and beautiful"
+      },
+      {
+        "from": "gpt",
+        "value": "scenic"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "I need an adventure that's not too intense, maybe canoeing?"
+      },
+      {
+        "from": "gpt",
+        "value": "kayaking"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "where can I watch the sunset today"
+      },
+      {
+        "from": "gpt",
+        "value": "scenic"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "Can you suggest some guided cycling tours for tomorrow?"
+      },
+      {
+        "from": "gpt",
+        "value": "biking"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "Where can I go to learn about local history and see historic landmarks"
+      },
+      {
+        "from": "gpt",
+        "value": "history"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "Where can I take my family for water activities and snorkeling?"
+      },
+      {
+        "from": "gpt",
+        "value": "swimming"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "Looking for missions and cultural landmarks to explore this weekend"
+      },
+      {
+        "from": "gpt",
+        "value": "history"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "I want to find somewhere with attractions for kids and also pretty gardens or meadows where we can have a picnic."
+      },
+      {
+        "from": "gpt",
+        "value": "kids, picnic"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "I'd love to do a brewery tour and then check out some Civil War battlefields nearby"
+      },
+      {
+        "from": "gpt",
+        "value": "food, history"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "I'd like to find a national park with multiple peak summits for a day adventure."
+      },
+      {
+        "from": "gpt",
+        "value": "hiking"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "meadows in the cotswolds good for spreading a blanket and eating outside"
+      },
+      {
+        "from": "gpt",
+        "value": "picnic"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "where can i take my kids to splash around near here"
+      },
+      {
+        "from": "gpt",
+        "value": "swimming"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "I'd love to pack a lunch and spend the afternoon in a beautiful garden"
+      },
+      {
+        "from": "gpt",
+        "value": "picnic"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "I want to feel peaceful paddling around a calm bay today"
+      },
+      {
+        "from": "gpt",
+        "value": "kayaking"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "Looking for something on two wheels to do this weekend"
+      },
+      {
+        "from": "gpt",
+        "value": "biking"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "something fun for 4 year olds in Austin Texas"
+      },
+      {
+        "from": "gpt",
+        "value": "kids"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "Can you find me a drive where I get lost in the landscape"
+      },
+      {
+        "from": "gpt",
+        "value": "scenic"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "Can you find me canoeing activities for a day trip?"
+      },
+      {
+        "from": "gpt",
+        "value": "kayaking"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "What heritage sites would make a good weekend adventure?"
+      },
+      {
+        "from": "gpt",
+        "value": "history"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "best sunset spots near me where I can relax and unwind"
+      },
+      {
+        "from": "gpt",
+        "value": "scenic"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "Show me where I can ride along the coast on a bike"
+      },
+      {
+        "from": "gpt",
+        "value": "biking"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "Help me plan a day where I can hit up a farmers market in the morning and tour a historic town in the afternoon"
+      },
+      {
+        "from": "gpt",
+        "value": "food, history"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "Can you suggest a scenic drive route that passes through wine country or has wineries along the way?"
+      },
+      {
+        "from": "gpt",
+        "value": "scenic, food"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "where can I find some bouldering spots for this weekend"
+      },
+      {
+        "from": "gpt",
+        "value": "hiking"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "I'm interested in bar hopping through cocktail bars and rooftop venues tonight."
+      },
+      {
+        "from": "gpt",
+        "value": "food"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "something fun on water colorado springs area"
+      },
+      {
+        "from": "gpt",
+        "value": "kayaking"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "Show me museums and cultural landmarks within driving distance"
+      },
+      {
+        "from": "gpt",
+        "value": "history"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "what's a nice spot to bring food and relax in nature"
+      },
+      {
+        "from": "gpt",
+        "value": "picnic"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "Show me lakes or rivers where I can do stand-up paddleboarding and have a nice swimming area"
+      },
+      {
+        "from": "gpt",
+        "value": "kayaking, swimming"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "family-friendly day trip ideas"
+      },
+      {
+        "from": "gpt",
+        "value": "kids"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "rollercoaster rides for children"
+      },
+      {
+        "from": "gpt",
+        "value": "kids"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "mountain peaks worth climbing"
+      },
+      {
+        "from": "gpt",
+        "value": "hiking"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "day trip to wine country with my partner"
+      },
+      {
+        "from": "gpt",
+        "value": "food"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "best spots for packing lunch"
+      },
+      {
+        "from": "gpt",
+        "value": "picnic"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "what overlook has the most breathtaking views around here"
+      },
+      {
+        "from": "gpt",
+        "value": "scenic"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "best places to snorkel around here this weekend"
+      },
+      {
+        "from": "gpt",
+        "value": "swimming"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "somewhere with great views of the coast"
+      },
+      {
+        "from": "gpt",
+        "value": "scenic"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "Can you help me find a beginner-friendly bike route for tomorrow"
+      },
+      {
+        "from": "gpt",
+        "value": "biking"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "Want to rent a bike and do a cycling tour around the city"
+      },
+      {
+        "from": "gpt",
+        "value": "biking"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "Find me somewhere remote with trails and fresh air, feeling adventurous"
+      },
+      {
+        "from": "gpt",
+        "value": "hiking"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "rent a bike downtown"
+      },
+      {
+        "from": "gpt",
+        "value": "biking"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "What are the best preserved old town districts to explore?"
+      },
+      {
+        "from": "gpt",
+        "value": "history"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "what can I do in San Antonio to learn about the area's past"
+      },
+      {
+        "from": "gpt",
+        "value": "history"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "I'm looking for mountain terrain where I can explore on two wheels"
       },
       {
         "from": "gpt",
@@ -871,71 +1895,7 @@
       },
       {
         "from": "human",
-        "value": "thinking about getting out on the water in a canoe"
-      },
-      {
-        "from": "gpt",
-        "value": "kayaking"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "national park visits near salt lake city utah"
-      },
-      {
-        "from": "gpt",
-        "value": "hiking"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "any water sports spots that aren't too rough"
-      },
-      {
-        "from": "gpt",
-        "value": "kayaking"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "stand up paddle boarding spots"
-      },
-      {
-        "from": "gpt",
-        "value": "kayaking"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "Can you suggest family-friendly attractions within an hour's drive that have rides?"
+        "value": "Where can I take my 6-year-old for a fun day out this weekend?"
       },
       {
         "from": "gpt",
@@ -951,11 +1911,11 @@
       },
       {
         "from": "human",
-        "value": "What are some good spots for a family day out that has both a pool and a playground?"
+        "value": "can you suggest somewhere I can spread a blanket and relax all day"
       },
       {
         "from": "gpt",
-        "value": "swimming, kids"
+        "value": "picnic"
       }
     ]
   },
@@ -967,55 +1927,7 @@
       },
       {
         "from": "human",
-        "value": "What's a really scenic route through the woods that takes about 4 hours?"
-      },
-      {
-        "from": "gpt",
-        "value": "hiking"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "I'm planning a day trip and want to explore somewhere with a rich past."
-      },
-      {
-        "from": "gpt",
-        "value": "history"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "What's open today that the whole family would actually enjoy?"
-      },
-      {
-        "from": "gpt",
-        "value": "kids"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "dog friendly winery tour for me and my spouse"
+        "value": "Take me to a rooftop bar with live music for the evening"
       },
       {
         "from": "gpt",
@@ -1031,11 +1943,11 @@
       },
       {
         "from": "human",
-        "value": "I'm looking for a scenic trail with a waterfall nearby for tomorrow's outing."
+        "value": "meadow spots near me today"
       },
       {
         "from": "gpt",
-        "value": "hiking"
+        "value": "picnic"
       }
     ]
   },
@@ -1047,11 +1959,11 @@
       },
       {
         "from": "human",
-        "value": "I want to visit somewhere with lots of ancient ruins"
+        "value": "I want to visit tasting rooms and maybe a speakeasy"
       },
       {
         "from": "gpt",
-        "value": "history"
+        "value": "food"
       }
     ]
   },
@@ -1063,55 +1975,7 @@
       },
       {
         "from": "human",
-        "value": "show me places that tell stories about this area"
-      },
-      {
-        "from": "gpt",
-        "value": "history"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "i need to escape the heat and go swimming somewhere close"
-      },
-      {
-        "from": "gpt",
-        "value": "swimming"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "best day trips near me with rides and attractions"
-      },
-      {
-        "from": "gpt",
-        "value": "kids"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "What's a good day trip destination with picturesque views and local food spots worth checking out"
+        "value": "Looking for a day trip where I can hike to a viewpoint and then grab lunch at a local farm-to-table spot"
       },
       {
         "from": "gpt",
@@ -1127,11 +1991,11 @@
       },
       {
         "from": "human",
-        "value": "Places to snorkel and see fish around here?"
+        "value": "I'm looking for a peaceful water activity like paddleboarding for my day outing tomorrow."
       },
       {
         "from": "gpt",
-        "value": "swimming"
+        "value": "kayaking"
       }
     ]
   },
@@ -1143,7 +2007,23 @@
       },
       {
         "from": "human",
-        "value": "places with good tasting rooms within driving distance"
+        "value": "Show me places where I can really understand this region"
+      },
+      {
+        "from": "gpt",
+        "value": "history"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "brewery district bar hopping in Denver Colorado this weekend"
       },
       {
         "from": "gpt",
@@ -1159,375 +2039,7 @@
       },
       {
         "from": "human",
-        "value": "Find me forest paths that lead to scenic overlooks for tomorrow"
-      },
-      {
-        "from": "gpt",
-        "value": "hiking, scenic"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "can you find me a spot with great views for photos"
-      },
-      {
-        "from": "gpt",
-        "value": "scenic"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "Need a peaceful escape, something involving paddling and nature"
-      },
-      {
-        "from": "gpt",
-        "value": "kayaking"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "where can I watch the sunset this weekend"
-      },
-      {
-        "from": "gpt",
-        "value": "scenic"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "I'd like to rent a bike and explore the area on two wheels."
-      },
-      {
-        "from": "gpt",
-        "value": "biking"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "are there any old districts or archaeological sites I should see"
-      },
-      {
-        "from": "gpt",
-        "value": "history"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "Can you find me some good snorkeling spots within an hour's drive?"
-      },
-      {
-        "from": "gpt",
-        "value": "swimming"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "show me cool historic battlefields I can visit this weekend"
-      },
-      {
-        "from": "gpt",
-        "value": "history"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "What's a good spot that has activities for children plus open green space where we could spread out a blanket and have a picnic?"
-      },
-      {
-        "from": "gpt",
-        "value": "kids, picnic"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "I'd like to spend a day exploring a historic downtown area with good restaurants and maybe some local food markets"
-      },
-      {
-        "from": "gpt",
-        "value": "food, history"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "I want to explore redwood forests and see some old-growth trees."
-      },
-      {
-        "from": "gpt",
-        "value": "hiking"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "austin texas meadows where i can spend the afternoon outside"
-      },
-      {
-        "from": "gpt",
-        "value": "picnic"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "where can i splash around with my friends this afternoon"
-      },
-      {
-        "from": "gpt",
-        "value": "swimming"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "Can you suggest beautiful gardens where I can escape and enjoy the day outside"
-      },
-      {
-        "from": "gpt",
-        "value": "picnic"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "I want to feel peaceful paddling around a calm lake today"
-      },
-      {
-        "from": "gpt",
-        "value": "kayaking"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "looking for easy bike routes that are good for families"
-      },
-      {
-        "from": "gpt",
-        "value": "biking"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "Fun playground and park combo in Denver metro area for young families"
-      },
-      {
-        "from": "gpt",
-        "value": "kids"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "coastal vistas that feel magical during golden hour"
-      },
-      {
-        "from": "gpt",
-        "value": "scenic"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "I want to do something on a kayak, any suggestions?"
-      },
-      {
-        "from": "gpt",
-        "value": "kayaking"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "I'm looking for somewhere to explore the past, maybe ancient structures"
-      },
-      {
-        "from": "gpt",
-        "value": "history"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "what are the best places to see mountain views around here?"
-      },
-      {
-        "from": "gpt",
-        "value": "scenic"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "are there any beginner-friendly cycling tours in the area?"
-      },
-      {
-        "from": "gpt",
-        "value": "biking"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "What are some good day trips where I can do a food tasting tour and also see some cultural landmarks?"
-      },
-      {
-        "from": "gpt",
-        "value": "food, history"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "Looking for a coastal day trip where I can see cliffs and also hit up some good seafood restaurants"
+        "value": "I'm planning a day trip this weekend and want to find a place with beautiful views and good restaurants nearby"
       },
       {
         "from": "gpt",
@@ -1543,39 +2055,7 @@
       },
       {
         "from": "human",
-        "value": "Where can I find some good bouldering spots within an hour of the city?"
-      },
-      {
-        "from": "gpt",
-        "value": "hiking"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "Looking for a foodie district with multiple restaurants and gourmet shops nearby."
-      },
-      {
-        "from": "gpt",
-        "value": "food"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "best places to go paddleboarding in the San Diego area"
+        "value": "things to do on a kayak in seattle"
       },
       {
         "from": "gpt",
@@ -1591,11 +2071,11 @@
       },
       {
         "from": "human",
-        "value": "Show me museums and cultural landmarks for a day trip"
+        "value": "Can you suggest cycling tours near the city for beginners"
       },
       {
         "from": "gpt",
-        "value": "history"
+        "value": "biking"
       }
     ]
   },
@@ -1607,11 +2087,11 @@
       },
       {
         "from": "human",
-        "value": "Relaxing places to sit outside away from crowds and enjoy the day"
+        "value": "I want to rent a kayak near me, any suggestions?"
       },
       {
         "from": "gpt",
-        "value": "picnic"
+        "value": "kayaking"
       }
     ]
   },
@@ -1623,11 +2103,11 @@
       },
       {
         "from": "human",
-        "value": "Can I do water sports like paddling and diving at the same place for a day trip?"
+        "value": "What are the best trails for off-road cycling adventures nearby"
       },
       {
         "from": "gpt",
-        "value": "kayaking, swimming"
+        "value": "biking"
       }
     ]
   },
@@ -1639,71 +2119,7 @@
       },
       {
         "from": "human",
-        "value": "family-friendly attractions near me"
-      },
-      {
-        "from": "gpt",
-        "value": "kids"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "where's the nearest zoo today"
-      },
-      {
-        "from": "gpt",
-        "value": "kids"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "national park day trips"
-      },
-      {
-        "from": "gpt",
-        "value": "hiking"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "day trip wine country tour with my partner this weekend"
-      },
-      {
-        "from": "gpt",
-        "value": "food"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "scenic outdoor spots near me"
+        "value": "where to enjoy the outdoors with food in regional victoria australia"
       },
       {
         "from": "gpt",
@@ -1719,7 +2135,7 @@
       },
       {
         "from": "human",
-        "value": "can you find me panoramic viewpoint spots for photography?"
+        "value": "Where should I go to feel inspired and awestruck today"
       },
       {
         "from": "gpt",
@@ -1735,7 +2151,55 @@
       },
       {
         "from": "human",
-        "value": "looking for a pool or lake to get in the water"
+        "value": "find me a meadow or field where we can hang out"
+      },
+      {
+        "from": "gpt",
+        "value": "picnic"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "Show me day trip ideas where I can learn about the area's past"
+      },
+      {
+        "from": "gpt",
+        "value": "history"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "Where can I find the best sunset watching spots within an hour's drive?"
+      },
+      {
+        "from": "gpt",
+        "value": "scenic"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "snorkeling spots that aren't too far for a day trip"
       },
       {
         "from": "gpt",
@@ -1751,11 +2215,11 @@
       },
       {
         "from": "human",
-        "value": "places with great views of the ocean"
+        "value": "best places to visit with little ones near me"
       },
       {
         "from": "gpt",
-        "value": "scenic"
+        "value": "kids"
       }
     ]
   },
@@ -1767,11 +2231,11 @@
       },
       {
         "from": "human",
-        "value": "Feeling energetic today, looking for challenging road cycling routes around here"
+        "value": "Can you help me find a day trip that combines visiting a food market with exploring a local history museum?"
       },
       {
         "from": "gpt",
-        "value": "biking"
+        "value": "food, history"
       }
     ]
   },
@@ -1783,11 +2247,11 @@
       },
       {
         "from": "human",
-        "value": "want to ride along the coast on my day off"
+        "value": "I want to feel fancy tonight with wine and some upscale tasting vibes"
       },
       {
         "from": "gpt",
-        "value": "biking"
+        "value": "food"
       }
     ]
   },
@@ -1799,7 +2263,23 @@
       },
       {
         "from": "human",
-        "value": "Looking to feel accomplished, somewhere with trails and natural beauty I can tackle"
+        "value": "where should we go to feel refreshed and take a dip"
+      },
+      {
+        "from": "gpt",
+        "value": "swimming"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "wilderness adventure for one day"
       },
       {
         "from": "gpt",
@@ -1815,11 +2295,11 @@
       },
       {
         "from": "human",
-        "value": "cycling tour through countryside routes"
+        "value": "I'm looking for something on a kayak, what's available?"
       },
       {
         "from": "gpt",
-        "value": "biking"
+        "value": "kayaking"
       }
     ]
   },
@@ -1831,11 +2311,11 @@
       },
       {
         "from": "human",
-        "value": "Where can I find ancient ruins or archaeological sites to explore today?"
+        "value": "where can i take my kids to eat lunch outside this weekend"
       },
       {
         "from": "gpt",
-        "value": "history"
+        "value": "picnic"
       }
     ]
   },
@@ -1847,11 +2327,11 @@
       },
       {
         "from": "human",
-        "value": "fun things in santa fe that showcase local heritage"
+        "value": "fun outdoor activities for children and adults to enjoy together"
       },
       {
         "from": "gpt",
-        "value": "history"
+        "value": "kids"
       }
     ]
   },
@@ -1863,11 +2343,11 @@
       },
       {
         "from": "human",
-        "value": "What are the best trails around here where I can rent a bike for the day?"
+        "value": "best bouldering spots within an hour's drive"
       },
       {
         "from": "gpt",
-        "value": "biking"
+        "value": "hiking"
       }
     ]
   },
@@ -1879,7 +2359,39 @@
       },
       {
         "from": "human",
-        "value": "show me what's around"
+        "value": "I'm looking for a lake or pool to get in the water"
+      },
+      {
+        "from": "gpt",
+        "value": "swimming"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "national park day trip ideas from Los Angeles"
+      },
+      {
+        "from": "gpt",
+        "value": "hiking"
+      }
+    ]
+  },
+  {
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
+      },
+      {
+        "from": "human",
+        "value": "what's a fun afternoon"
       },
       {
         "from": "gpt",
@@ -1895,519 +2407,7 @@
       },
       {
         "from": "human",
-        "value": "I'm looking for a day trip where my 6-year-old would have fun and stay entertained."
-      },
-      {
-        "from": "gpt",
-        "value": "kids"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "Looking for quiet places to unpack some snacks and spend time in nature"
-      },
-      {
-        "from": "gpt",
-        "value": "picnic"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "I'm searching for somewhere with local food culture and tasting experiences"
-      },
-      {
-        "from": "gpt",
-        "value": "food"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "countryside spots to relax outside"
-      },
-      {
-        "from": "gpt",
-        "value": "picnic"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "brewery hopping day trip - where's the best spot to start"
-      },
-      {
-        "from": "gpt",
-        "value": "food"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "Can you suggest a scenic mountain town with hiking trails and a farmers market I could visit in one day"
-      },
-      {
-        "from": "gpt",
-        "value": "scenic, food"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "I want to spend the day paddling around, possibly renting equipment locally."
-      },
-      {
-        "from": "gpt",
-        "value": "kayaking"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "where can I explore something really old and meaningful"
-      },
-      {
-        "from": "gpt",
-        "value": "history"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "tasting room hopping in Sonoma County"
-      },
-      {
-        "from": "gpt",
-        "value": "food"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "I want to spend a day driving through wine country with some amazing views and vineyard tastings"
-      },
-      {
-        "from": "gpt",
-        "value": "scenic, food"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "canoeing day trip ideas for the Lake Tahoe area"
-      },
-      {
-        "from": "gpt",
-        "value": "kayaking"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "Show me some challenging mountain paths I can explore on two wheels"
-      },
-      {
-        "from": "gpt",
-        "value": "biking"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "What's a good spot for water sports on calm lakes?"
-      },
-      {
-        "from": "gpt",
-        "value": "kayaking"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "Are there any beginner-friendly paths where I can ride without much experience?"
-      },
-      {
-        "from": "gpt",
-        "value": "biking"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "melbourne parks and gardens where you can sit and enjoy the day"
-      },
-      {
-        "from": "gpt",
-        "value": "picnic"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "i'm craving somewhere with panoramic views that feels inspiring"
-      },
-      {
-        "from": "gpt",
-        "value": "scenic"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "Need somewhere peaceful to sit outside and enjoy the day with my family"
-      },
-      {
-        "from": "gpt",
-        "value": "picnic"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "what are the best museums in the area for a day trip"
-      },
-      {
-        "from": "gpt",
-        "value": "history"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "Where can I find the best sunset spots within driving distance?"
-      },
-      {
-        "from": "gpt",
-        "value": "scenic"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "Need a refreshing escape, somewhere I can take a dip"
-      },
-      {
-        "from": "gpt",
-        "value": "swimming"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "my 6-year-old would love a place with slides and climbing structures nearby"
-      },
-      {
-        "from": "gpt",
-        "value": "kids"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "Can you help me find a day trip that combines a brewery tour with some Civil War battlefield sites?"
-      },
-      {
-        "from": "gpt",
-        "value": "food, history"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "I want to feel like a local exploring authentic flavors and hidden culinary gems"
-      },
-      {
-        "from": "gpt",
-        "value": "food"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "Feeling like a beach adventure, any recommendations nearby?"
-      },
-      {
-        "from": "gpt",
-        "value": "swimming"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "wilderness adventures close by"
-      },
-      {
-        "from": "gpt",
-        "value": "hiking"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "Are there any canoeing spots within an hour of here?"
-      },
-      {
-        "from": "gpt",
-        "value": "kayaking"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "where can I take my kids for a outdoor lunch in a nice park"
-      },
-      {
-        "from": "gpt",
-        "value": "picnic"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "best theme parks within an hour for a family with young children"
-      },
-      {
-        "from": "gpt",
-        "value": "kids"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "looking for a spot with mountain peaks nearby"
-      },
-      {
-        "from": "gpt",
-        "value": "hiking"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "Can you suggest beaches for a refreshing dip this Saturday?"
-      },
-      {
-        "from": "gpt",
-        "value": "swimming"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "somewhere with waterfalls within 2 hours of austin texas"
-      },
-      {
-        "from": "gpt",
-        "value": "hiking"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "what's there to do around here"
-      },
-      {
-        "from": "gpt",
-        "value": "none"
-      }
-    ]
-  },
-  {
-    "conversations": [
-      {
-        "from": "system",
-        "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."
-      },
-      {
-        "from": "human",
-        "value": "I'm looking for a cycling tour route that has viewpoints and photo spots along the way"
+        "value": "What's a good spot for a cycling tour that passes through really picturesque areas?"
       },
       {
         "from": "gpt",
@@ -2423,7 +2423,7 @@
       },
       {
         "from": "human",
-        "value": "Need ideas for little ones who are obsessed with animals and water"
+        "value": "family-friendly attractions with playgrounds and outdoor activities"
       },
       {
         "from": "gpt",
@@ -2439,7 +2439,7 @@
       },
       {
         "from": "human",
-        "value": "where can I watch the sunset near me"
+        "value": "what's the best overlook near me for watching the sunset"
       },
       {
         "from": "gpt",
@@ -2455,7 +2455,7 @@
       },
       {
         "from": "human",
-        "value": "Best pool for the day with my dog that allows pets"
+        "value": "Where can I take my family for a fun water activity?"
       },
       {
         "from": "gpt",
@@ -2487,7 +2487,7 @@
       },
       {
         "from": "human",
-        "value": "show me panoramic viewpoints in the area"
+        "value": "best viewpoints for mountain views within an hour of the city"
       },
       {
         "from": "gpt",
@@ -2503,7 +2503,7 @@
       },
       {
         "from": "human",
-        "value": "mountain overlooks where i can just breathe and relax"
+        "value": "What coastal viewpoints would make me feel like I'm on top of the world"
       },
       {
         "from": "gpt",
@@ -2519,7 +2519,7 @@
       },
       {
         "from": "human",
-        "value": "Can we go paddleboarding somewhere peaceful and scenic tomorrow?"
+        "value": "Show me water sports options that don't require a lot of experience"
       },
       {
         "from": "gpt",
@@ -2535,7 +2535,7 @@
       },
       {
         "from": "human",
-        "value": "what's close by with games and entertainment for the whole family"
+        "value": "Top-rated attractions for families with small children in the area"
       },
       {
         "from": "gpt",
@@ -2551,7 +2551,7 @@
       },
       {
         "from": "human",
-        "value": "Can you find me a quiet meadow to spend the afternoon in?"
+        "value": "botanical gardens close by where i can bring sandwiches"
       },
       {
         "from": "gpt",
@@ -2567,7 +2567,7 @@
       },
       {
         "from": "human",
-        "value": "find me a beach nearby where i can actually swim"
+        "value": "do you have any hidden gems for water activities nearby"
       },
       {
         "from": "gpt",
@@ -2583,7 +2583,7 @@
       },
       {
         "from": "human",
-        "value": "paddle around the bay near San Francisco today"
+        "value": "paddle around san francisco bay today"
       },
       {
         "from": "gpt",
@@ -2599,7 +2599,7 @@
       },
       {
         "from": "human",
-        "value": "I'm trying to find a day trip that combines a water park experience with other attractions for the family"
+        "value": "Looking for a destination with a beach or pool plus family-friendly attractions for a day out"
       },
       {
         "from": "gpt",
@@ -2615,7 +2615,7 @@
       },
       {
         "from": "human",
-        "value": "Show me places to learn about the area's past and culture"
+        "value": "Can you suggest places with lots of old architecture?"
       },
       {
         "from": "gpt",

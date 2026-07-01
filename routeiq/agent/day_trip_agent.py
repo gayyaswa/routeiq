@@ -227,22 +227,20 @@ def _schedule_stops(
         for s in stops:
             logger.debug("schedule input stop: %r lat=%.4f lon=%.4f", s.get("name"), s.get("lat", 0), s.get("lon", 0))
 
-        # Nearest-neighbor sort: best composite_score first, then greedy by distance
+        # Geographic nearest-neighbor route: anchor on the northernmost stop so the
+        # day trip flows as a traversal (not score-first, which puts islands/extremes first).
         remaining = list(stops)
-        if any("composite_score" in s for s in remaining):
-            first = max(remaining, key=lambda s: s.get("composite_score") or 0.0)
-            remaining.remove(first)
-            sorted_stops: List[dict] = [first]
-            while remaining:
-                last = sorted_stops[-1]
-                nearest = min(
-                    remaining,
-                    key=lambda s: _haversine_km(last["lat"], last["lon"], s["lat"], s["lon"]),
-                )
-                remaining.remove(nearest)
-                sorted_stops.append(nearest)
-        else:
-            sorted_stops = list(stops)
+        first = max(remaining, key=lambda s: s.get("lat") or 0.0)
+        remaining.remove(first)
+        sorted_stops: List[dict] = [first]
+        while remaining:
+            last = sorted_stops[-1]
+            nearest = min(
+                remaining,
+                key=lambda s: _haversine_km(last["lat"], last["lon"], s["lat"], s["lon"]),
+            )
+            remaining.remove(nearest)
+            sorted_stops.append(nearest)
 
         # Build timeline; leg_coord_slices[0] is empty (no drive before first stop)
         leg_coord_slices: List[list] = [[]]
@@ -409,7 +407,8 @@ def _plan(state: DayTripState, config: Optional[RunnableConfig] = None) -> dict:
     from routeiq.timing import log as _tlog, clear as _tclear
     _tclear()
     max_iterations = 6
-    _rate_pois_calls = 0  # guard against the LLM retrying rate_pois when no activity POIs found
+    _rate_pois_calls = 0       # guard: stop if rate_pois retried after already ran once
+    _find_city_pois_calls = 0  # guard: stop if find_city_pois called again after results exist
     _iter_t0 = time.perf_counter()
     for iteration in range(max_iterations):
         _llm_t0 = time.perf_counter()
@@ -468,6 +467,26 @@ def _plan(state: DayTripState, config: Optional[RunnableConfig] = None) -> dict:
 
         if "rate_pois" in tool_names:
             _rate_pois_calls += 1
+
+        # Guard: stop if the LLM calls find_city_pois or select_pois_for_day a second time.
+        # Happens with unrecognised user contexts (e.g. "nightlife partying") — the LLM
+        # retries POI discovery hoping for different results, burning iterations.
+        _poi_discovery_tools = {"find_city_pois", "select_pois_for_day"}
+        if _poi_discovery_tools & set(tool_names) and _find_city_pois_calls >= 1:
+            logger.warning(
+                "ReAct loop iter=%d POI discovery called again (total=%d, tools=%s) — injecting stop nudge",
+                iteration, _find_city_pois_calls + 1, tool_names,
+            )
+            messages.pop()  # discard the duplicate tool-call response
+            messages.append(HumanMessage(content=(
+                "POI discovery has already run. The city POIs are in the previous tool results. "
+                "Do NOT call find_city_pois or select_pois_for_day again. "
+                "Call rate_pois on the existing POI list, then stop."
+            )))
+            continue  # let rate_pois run if it hasn't yet (don't break)
+
+        if _poi_discovery_tools & set(tool_names):
+            _find_city_pois_calls += 1
 
         # Emit progress for the first tool in each iteration
         if thread_id and tool_names:

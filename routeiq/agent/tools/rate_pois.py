@@ -9,7 +9,7 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
 from routeiq.graph.poi import POI
-from routeiq.rag.poi_rating_store import POIRatingStore
+from routeiq.rag.poi_knowledge_store import POIKnowledgeStore
 from routeiq.ratings.factory import RatingsFactory
 from routeiq.rag.wikipedia_fetcher import WikipediaFetcher
 from routeiq.agent.tools.estimate_visit import _VISIT_MINUTES, _DEFAULT_MINUTES
@@ -18,8 +18,15 @@ _TOP_N = 30
 _ACTIVITY_PASSTHROUGH_FIELDS = ("matched_activities", "activity_evidence", "track")
 _POI_FIELDS: set[str] | None = None  # lazily populated
 
+# poi_knowledge metadata fields that map straight onto a rate_pois output entry.
+_KNOWLEDGE_TO_ENTRY_FIELDS = (
+    "rating", "review_count", "review_snippet", "all_snippets",
+    "review_source", "photo_urls", "hours", "visit_duration_min", "composite_score",
+)
+
 
 def _poi_fields() -> set[str]:
+    """Lazily compute and cache the set of POI dataclass field names."""
     global _POI_FIELDS
     if _POI_FIELDS is None:
         _POI_FIELDS = {f.name for f in dataclasses.fields(POI)}
@@ -34,6 +41,7 @@ def _wikipedia_weight(wikipedia_tag: str | None) -> float:
 
 
 def _composite_score(rating: float | None, review_count: int | None, wikipedia_tag: str | None) -> float:
+    """Blend rating (40%), review volume (30%), and Wikipedia presence (30%) into one rank score."""
     r = (rating / 5.0) if rating is not None else 0.5
     v = math.log1p(review_count or 0) / math.log1p(10_000)
     w = _wikipedia_weight(wikipedia_tag)
@@ -54,8 +62,20 @@ def _keep(entry: dict) -> bool:
 
 
 def _wiki_enrich(poi: POI) -> None:
+    """Fetch and attach a Wikipedia description to the POI in place, if it doesn't have one yet."""
     if not poi.description:
         WikipediaFetcher().enrich(poi)
+
+
+def _entry_from_knowledge(poi: POI, knowledge: dict, extra: dict) -> dict:
+    """Build a rate_pois output entry from a poi_knowledge metadata hit + POI geometry."""
+    entry = dataclasses.asdict(poi)
+    for field in _KNOWLEDGE_TO_ENTRY_FIELDS:
+        entry[field] = knowledge.get(field)
+    entry["all_snippets"] = knowledge.get("all_snippets") or []
+    entry["photo_urls"] = knowledge.get("photo_urls") or []
+    entry.update(extra)
+    return entry
 
 
 def _build_entry(rp, extra: dict) -> dict:
@@ -120,27 +140,29 @@ def rate_pois(city: str, poi_list_json: str, config: RunnableConfig) -> str:
             misses.append(poi)
 
     if misses:
-        # ── Layer 2: ChromaDB 21-day persistent cache (single batch query) ────
-        store = POIRatingStore()
+        # ── Layer 2: unified poi_knowledge store (prefetched at city load) ────
+        # Plan A — provider calls happen once at prefetch time, not inside the
+        # ReAct loop, so a warm city resolves here in one ChromaDB round-trip.
+        _t_know = time.perf_counter()
+        store = POIKnowledgeStore()
         miss_names = [poi.name for poi in misses]
-        l2_hits = store.get_batch(city, miss_names)  # one ChromaDB round-trip for all misses
+        knowledge_hits = store.get_metadata(city, miss_names)
+        _tlog(f"rate_pois poi_knowledge={time.perf_counter()-_t_know:.2f}s hits={len(knowledge_hits)}/{len(misses)}")
         still_missing: list[POI] = []
 
         for poi in misses:
-            cached = l2_hits.get(poi.name)
-            if cached is not None:
-                # Restore POI geometry fields not stored in ChromaDB metadata
-                for f in dataclasses.fields(POI):
-                    if f.name not in cached:
-                        cached[f.name] = getattr(poi, f.name)
-                cached.update(extra_by_name.get(poi.name, {}))
-                hits.append(cached)
-                session_cache[f"{city}||{poi.name}"] = cached
+            knowledge = knowledge_hits.get(poi.name)
+            if knowledge is not None:
+                entry = _entry_from_knowledge(poi, knowledge, extra_by_name.get(poi.name, {}))
+                hits.append(entry)
+                session_cache[f"{city}||{poi.name}"] = entry
             else:
                 still_missing.append(poi)
 
         if still_missing:
-            # ── Full fetch: Wikipedia + active rating provider ────────────────
+            # ── Cold-path fallback: city was never prefetched — fetch directly.
+            # Costs API calls inline (the behavior Plan A's prefetch step is meant
+            # to eliminate), but keeps rate_pois correct even without a prior prefetch.
             _t_wiki = time.perf_counter()
             with ThreadPoolExecutor(max_workers=6) as pool:
                 list(pool.map(_wiki_enrich, still_missing))
@@ -150,15 +172,19 @@ def rate_pois(city: str, poi_list_json: str, config: RunnableConfig) -> str:
             rated = RatingsFactory.create().enrich_batch(city, still_missing)
             _tlog(f"rate_pois provider={time.perf_counter()-_t_rate:.2f}s")
 
-            new_entries: dict[str, dict] = {}
+            knowledge_entries: list[dict] = []
             for rp in rated:
                 extra = extra_by_name.get(rp.poi.name, {})
                 entry = _build_entry(rp, extra)
-                new_entries[rp.poi.name] = entry
                 session_cache[f"{city}||{rp.poi.name}"] = entry
                 hits.append(entry)
+                knowledge_entries.append({
+                    **entry,
+                    "poi_name": rp.poi.name,
+                    "wikipedia_description": rp.poi.description or "",
+                })
 
-            store.put_batch(city, new_entries)  # one ChromaDB round-trip for all writes
+            store.upsert_batch(city, knowledge_entries)
 
     scored = sorted(
         [e for e in hits if _keep(e)],
