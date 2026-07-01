@@ -5,6 +5,7 @@ import os
 import time
 import threading
 import uuid
+from pathlib import Path
 
 # _T0 must come before ALL third-party imports — osmnx/pandas/shapely import chains
 # previously took 25-30s silently before the timer was set.
@@ -523,13 +524,22 @@ tab1, tab2 = st.tabs(["🏙 Day Trip Planner", "🗺 Route Planner"])
 # TAB 1 — Day Trip Planner
 # ═══════════════════════════════════════════════════════════════════════════════
 
+import re as _re
+import json as _json
+_US_CITIES: list[str] = _json.load(open("data/us_cities.json"))
+_OTHER_CITY_OPTION = "✈ Other city (type below)…"
+_CITY_OPTIONS = _US_CITIES + [_OTHER_CITY_OPTION]
+
 _ACTIVITY_TEXT_KEYWORDS: dict[str, list[str]] = {
-    "hiking":   ["hiking", "hike", "trail", "trails", "trek", "trekking"],
-    "biking":   ["biking", "bike", "cycling", "cycle"],
-    "swimming": ["swimming", "swim"],
-    "kayaking": ["kayaking", "kayak"],
-    "kids":     ["kids", "kid", "family", "families", "children", "child", "toddler"],
-    "picnic":   ["picnic"],
+    "hiking":    ["hiking", "hike", "trail", "trails", "trek", "trekking"],
+    "biking":    ["biking", "bike", "cycling", "cycle"],
+    "swimming":  ["swimming", "swim"],
+    "kayaking":  ["kayaking", "kayak"],
+    "kids":      ["kids", "kid", "family", "families", "children", "child", "toddler"],
+    "picnic":    ["picnic"],
+    "history":   ["history", "historic", "museum", "mission", "ruins", "castle", "fort", "heritage", "battlefield"],
+    "food":      ["food", "restaurant", "winery", "brewery", "bar", "nightlife", "cocktail", "jazz", "lunch", "dinner", "coffee", "cafe"],
+    "scenic":    ["scenic", "viewpoint", "overlook", "panoram", "vista", "view", "attraction", "attractions", "sightseeing", "places to visit"],
 }
 
 def _infer_activities_from_text(text: str) -> list[str]:
@@ -538,35 +548,32 @@ def _infer_activities_from_text(text: str) -> list[str]:
     return [act for act, kws in _ACTIVITY_TEXT_KEYWORDS.items() if any(kw in low for kw in kws)]
 
 
-# Cities pre-loaded in the Bay Area KG master — instant POI lookup, no Overpass call
-_DEMO_CITIES_FAST = [
-    "San Francisco, CA", "Oakland, CA", "Berkeley, CA",
-    "San Jose, CA",
-]
-# Cities that need a live Overpass fetch on first use (~15–30 s), then cached
-_DEMO_CITIES_SLOW = [
-    "Santa Cruz, CA", "Los Angeles, CA", "New York, NY",
-    "Chicago, IL", "Seattle, WA", "Austin, TX",
-]
+def _cached_city_names() -> list[str]:
+    """Cities already in the local KG + rating cache — shown as hint under city selectbox."""
+    from routeiq.graph.knowledge_graph import get_kg
+    names: set[str] = set(get_kg().known_cities())
+    rating_dir = Path("cache/ratings")
+    if rating_dir.exists():
+        for f in rating_dir.glob("llm_synthetic_*.json"):
+            m = _re.match(r"llm_synthetic_(.+)_([a-z]{2})\.json", f.name)
+            if m:
+                names.add(f"{m.group(1).replace('_', ' ').title()}, {m.group(2).upper()}")
+    return sorted(names)
 
 with tab1:
     st.markdown("**Plan a scenic day in any city — the agent picks stops, you approve.**")
 
     # ── Inputs ────────────────────────────────────────────────────────────────
 
-    _OTHER_CITY = "Other city (type below)…"
-    _KNOWN_CITY_OPTIONS = _DEMO_CITIES_FAST + _DEMO_CITIES_SLOW + [_OTHER_CITY]
-
-    dt_col1, dt_col2, dt_col3, dt_col4 = st.columns([3, 2, 1, 1])
-    _act_col1, _act_col2 = st.columns([3, 4])
+    dt_col1, dt_col3, dt_col4 = st.columns([4, 1, 1])
     with dt_col1:
         dt_city_sel = st.selectbox(
             "City",
-            options=_KNOWN_CITY_OPTIONS,
+            options=_CITY_OPTIONS,
             index=0,
             key="dt_city_sel",
         )
-        if dt_city_sel == _OTHER_CITY:
+        if dt_city_sel == _OTHER_CITY_OPTION:
             dt_city = st.text_input(
                 "City name",
                 placeholder="e.g. Boston, MA or Tokyo, Japan",
@@ -575,15 +582,9 @@ with tab1:
             st.caption("Any city worldwide — spelling is auto-corrected. First use ~30 s.")
         else:
             dt_city = dt_city_sel
-            if dt_city_sel in _DEMO_CITIES_FAST:
-                st.caption("⚡ Instant — pre-loaded")
-            else:
-                st.caption("🌐 First use ~30 s — fetches from OpenStreetMap")
-    with dt_col2:
-        dt_prefs = st.multiselect(
-            "Interests", options=["nature", "history", "food", "art", "architecture"],
-            default=["nature", "history"], key="dt_prefs"
-        )
+            _cached = _cached_city_names()
+            if _cached:
+                st.caption("✅ Cached locally: " + " · ".join(_cached))
     with dt_col3:
         dt_hours = st.slider("Hours", min_value=4, max_value=12, value=8, step=1, key="dt_hours")
     with dt_col4:
@@ -593,29 +594,22 @@ with tab1:
             index=1, key="dt_start"
         )
 
-    with _act_col1:
-        dt_activities = st.multiselect(
-            "Activities (optional)",
-            options=["hiking", "biking", "swimming", "kayaking", "kids", "picnic"],
-            default=[],
-            key="dt_activities",
-            help="Select activities to prioritize specific POI types.",
-        )
-    with _act_col2:
-        dt_user_context = st.text_input(
-            "Activity style (optional)",
-            placeholder="e.g. scenic coastal hiking, easy family trails",
-            key="dt_user_context",
-        )
-        if dt_user_context and not dt_activities:
-            _preview = _infer_activities_from_text(dt_user_context)
-            if _preview:
-                st.caption(f"Activity tags detected: {', '.join(_preview)}")
+    dt_user_context = st.text_input(
+        "What do you want to do? (optional)",
+        placeholder="e.g. top attractions and a nice lunch spot, scenic coastal hike with kids",
+        key="dt_user_context",
+    )
+    if dt_user_context:
+        _preview = _infer_activities_from_text(dt_user_context)
+        if _preview:
+            st.caption(f"→ {', '.join(_preview)}  (will be refined by classifier on plan)")
+        else:
+            st.caption("→ top scenic spots  (no specific activity detected — 5 scenic fills)")
 
     dt_phase = st.session_state.get("dt_phase", "idle")
     dt_thread_id = st.session_state.setdefault("dt_thread_id", str(uuid.uuid4()))
 
-    _city_missing = dt_city_sel == _OTHER_CITY and not dt_city.strip()
+    _city_missing = dt_city_sel == _OTHER_CITY_OPTION and not dt_city.strip()
     plan_btn = st.button(
         "Plan My Day ›", type="primary",
         disabled=dt_phase in ("planning", "narrating") or _city_missing,
@@ -658,8 +652,16 @@ with tab1:
                 )
                 st.stop()
 
-        _logger.info("plan_btn clicked city=%r start_time=%r hours=%s prefs=%s phase_was=%s",
-                     dt_city, dt_start, dt_hours, dt_prefs, dt_phase)
+        # Plan A — prefetch POI knowledge (Wikipedia + ratings + activity tags) for this
+        # city before the agent runs. Warm cities (within the 21-day TTL) return instantly;
+        # cold cities pay the provider-call cost here instead of inside the ReAct loop.
+        from routeiq.rag.city_prefetcher import CityPrefetcher
+        city_pois = kg.get_pois_for_city(city_short)
+        with st.spinner(f"Building POI knowledge base for {dt_city_norm}…"):
+            CityPrefetcher().prefetch(dt_city_norm, city_pois)
+
+        _logger.info("plan_btn clicked city=%r start_time=%r hours=%s phase_was=%s",
+                     dt_city, dt_start, dt_hours, dt_phase)
 
         # Reset session for a fresh plan
         new_thread_id = str(uuid.uuid4())
@@ -669,7 +671,6 @@ with tab1:
         st.session_state.pop("dt_narrative", None)
         st.session_state.pop("dt_route_coords", None)
         st.session_state["dt_city_val"] = dt_city
-        st.session_state["dt_prefs_val"] = dt_prefs
         st.session_state["dt_hours_val"] = dt_hours
         st.session_state["dt_start_val"] = dt_start
 
@@ -680,9 +681,7 @@ with tab1:
         st.session_state["dt_result_holder"] = rh
         st.session_state["dt_progress"] = dt_progress
         st.session_state["dt_progress_thread_id"] = new_thread_id
-        # If the user left the multiselect empty but described activities in the text
-        # input, infer activity tags from the text so select_pois_for_day is invoked.
-        _explicit = list(dt_activities)
+        _explicit: list[str] = []
         _semantic_queries: dict = {}
         if os.getenv("ACTIVITY_PROVIDER", "osm").lower() == "finetuned" and not _explicit:
             from routeiq.activities.finetuned_classifier import create_query_intent_classifier
@@ -700,7 +699,7 @@ with tab1:
         initial_state = {
             "messages": [],
             "city": dt_city_norm,
-            "preferences": dt_prefs,
+            "preferences": final_activities,
             "time_budget_hours": float(dt_hours),
             "start_time": dt_start,
             "draft_itinerary": None,
