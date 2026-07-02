@@ -48,6 +48,51 @@ class TestTagMatching:
         results = clf.classify_batch("City", [_poi("Sandy Beach", subtype="beach")], ["swimming"])
         assert "swimming" in results[0].matched_activities
 
+    # landmarks tag
+    def test_landmarks_attraction_tag(self, clf):
+        results = clf.classify_batch("City", [_poi("Golden Gate Bridge", subtype="attraction")], ["landmarks"])
+        assert "landmarks" in results[0].matched_activities
+
+    def test_landmarks_landmark_tag(self, clf):
+        results = clf.classify_batch("City", [_poi("Coit Tower", subtype="landmark")], ["landmarks"])
+        assert "landmarks" in results[0].matched_activities
+
+    def test_landmarks_aquarium_tag(self, clf):
+        results = clf.classify_batch("City", [_poi("Bay Aquarium", subtype="aquarium")], ["landmarks"])
+        assert "landmarks" in results[0].matched_activities
+
+    # nature tag
+    def test_nature_park_tag(self, clf):
+        results = clf.classify_batch("City", [_poi("Golden Gate Park", subtype="park")], ["nature"])
+        assert "nature" in results[0].matched_activities
+
+    def test_nature_waterfall_tag(self, clf):
+        results = clf.classify_batch("City", [_poi("Bridal Falls", subtype="waterfall")], ["nature"])
+        assert "nature" in results[0].matched_activities
+
+    def test_nature_lake_tag(self, clf):
+        results = clf.classify_batch("City", [_poi("Lake Tahoe", subtype="lake")], ["nature"])
+        assert "nature" in results[0].matched_activities
+
+    def test_nature_reserve_matches_both_hiking_and_nature(self, clf):
+        poi = _poi("Muir Woods", subtype="nature_reserve")
+        results = clf.classify_batch("City", [poi], ["hiking", "nature"])
+        matched = set(results[0].matched_activities)
+        assert "hiking" in matched and "nature" in matched
+
+    # arts tag
+    def test_arts_gallery_tag(self, clf):
+        results = clf.classify_batch("City", [_poi("SFMOMA", subtype="gallery")], ["arts"])
+        assert "arts" in results[0].matched_activities
+
+    def test_arts_theatre_tag(self, clf):
+        results = clf.classify_batch("City", [_poi("The Fillmore", subtype="theatre")], ["arts"])
+        assert "arts" in results[0].matched_activities
+
+    def test_arts_centre_tag(self, clf):
+        results = clf.classify_batch("City", [_poi("Davies Hall", subtype="arts_centre")], ["arts"])
+        assert "arts" in results[0].matched_activities
+
 
 class TestKeywordMatching:
     def test_keyword_trail_gives_hiking(self, clf):
@@ -96,7 +141,7 @@ class TestBatchBehaviour:
         pois = [_poi("Bike Path", subtype="cycling_path")]
         results = clf.classify_batch("City", pois, ["biking"])
         assert results[0].activity_evidence is not None
-        assert "OSM tag" in results[0].activity_evidence
+        assert results[0].activity_evidence.startswith("osm:")
 
     def test_multiple_pois_multiple_activities(self, clf):
         pois = [
