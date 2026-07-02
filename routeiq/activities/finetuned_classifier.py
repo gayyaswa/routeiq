@@ -9,11 +9,14 @@ logger = logging.getLogger(__name__)
 _SYSTEM_PROMPT = (
     "You are a day trip intent classifier. "
     "Given a user query, output the activity tags that match their intent. "
-    "Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. "
+    "Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic, landmarks, nature, arts. "
     "Output matching tags as a comma-separated list, or 'none' if no activity is implied."
 )
 
-_ALL_TAGS = frozenset(["hiking", "biking", "swimming", "kayaking", "kids", "picnic", "history", "food", "scenic"])
+_ALL_TAGS = frozenset([
+    "hiking", "biking", "swimming", "kayaking", "kids", "picnic",
+    "history", "food", "scenic", "landmarks", "nature", "arts",
+])
 
 _DEFAULT_MODEL_PATH = os.getenv("FINETUNED_MODEL_PATH", "./models/intent")
 

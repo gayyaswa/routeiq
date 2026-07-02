@@ -1,7 +1,10 @@
 """Generate intent classifier training data via Claude Haiku API.
 
-Produces ~1000 ShareGPT-format examples for fine-tuning Qwen3-1.7B on 9 activity tags.
-Output: data/intent_train.json (800 examples) + data/intent_val.json (200 examples).
+Produces ~1200 ShareGPT-format examples for fine-tuning Qwen3-1.7B on 12 activity tags.
+Output: data/intent_train.json (960 examples) + data/intent_val.json (240 examples).
+
+Tags (12): hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic,
+           landmarks, nature, arts
 
 Usage:
     python3 scripts/generate_intent_training_data.py
@@ -28,12 +31,15 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-TAGS = ["hiking", "biking", "swimming", "kayaking", "kids", "picnic", "history", "food", "scenic"]
+TAGS = [
+    "hiking", "biking", "swimming", "kayaking", "kids", "picnic",
+    "history", "food", "scenic", "landmarks", "nature", "arts",
+]
 
 SYSTEM_PROMPT = (
     "You are a day trip intent classifier. "
     "Given a user query, output the activity tags that match their intent. "
-    "Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. "
+    "Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic, landmarks, nature, arts. "
     "Output matching tags as a comma-separated list, or 'none' if no activity is implied."
 )
 
@@ -91,6 +97,27 @@ _TAG_DESCRIPTIONS: dict[str, str] = {
         "'somewhere with great views', 'best overlook', 'where can I watch the sunset', "
         "'great ocean views', 'scenic spot'."
     ),
+    "landmarks": (
+        "famous tourist attractions, iconic structures, must-see sights, popular destinations. "
+        "Examples: Golden Gate Bridge, Coit Tower, Bay Bridge, Alcatraz, Space Needle, "
+        "Statue of Liberty, piers, towers, famous bridges. Include: 'top attractions', "
+        "'must-see spots', 'iconic sights', 'famous landmarks', 'popular things to see', "
+        "'tourist highlights', 'what should I visit', 'classic sightseeing'."
+    ),
+    "nature": (
+        "nature reserves, national parks, state parks, forests, wildlife areas, wetlands, "
+        "botanical gardens, lakes, rivers. NOT the same as hiking — user wants to be in nature "
+        "but not necessarily hike hard trails. Include: 'get into nature', 'somewhere green', "
+        "'wildlife and forests', 'national park day trip', 'among the trees', 'natural areas', "
+        "'see some wildlife', 'peaceful natural setting', 'away from the city into nature'."
+    ),
+    "arts": (
+        "art galleries, art museums, theatres, performing arts venues, cultural centers, "
+        "sculpture gardens, street art districts, exhibitions, art walks. "
+        "Include: 'gallery hopping', 'explore the art scene', 'see a show or performance', "
+        "'cultural venues', 'art exhibition', 'theatre night', 'creative neighborhood', "
+        "'street murals and art', 'arts district', 'museum of modern art visit'."
+    ),
 }
 
 _STYLE_VARIANTS = [
@@ -140,7 +167,7 @@ def _build_none_prompt(n: int) -> str:
         f"Examples of the vibe: 'show me a nice day in SF', 'plan a relaxing afternoon', "
         f"'just want to get out of the house', 'find me something fun to do'.\n\n"
         f"Rules:\n"
-        f"- Must NOT imply any of: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic\n"
+        f"- Must NOT imply any of: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic, landmarks, nature, arts\n"
         f"- Sound natural\n"
         f"- Output one query per line, no numbering, no extra text"
     )
@@ -288,8 +315,9 @@ def main() -> None:
         examples = generate_single_label(client, tag, single_label_n, args.dry_run)
         all_examples.extend(examples)
 
-    # Multi-label pairs: representative combinations (~70 total = 10 pairs × 7 each)
+    # Multi-label pairs: representative combinations (~130 total = 19 pairs × 7 each)
     multi_pairs = [
+        # original 9-tag pairs
         ("hiking", "kids"),
         ("hiking", "scenic"),
         ("food", "history"),
@@ -300,6 +328,16 @@ def main() -> None:
         ("history", "hiking"),
         ("kids", "picnic"),
         ("biking", "scenic"),
+        # new pairs involving landmarks, nature, arts
+        ("landmarks", "kids"),    # family sightseeing: theme parks + GGB
+        ("landmarks", "history"), # historic landmarks + museums
+        ("landmarks", "scenic"),  # viewpoints + iconic attractions
+        ("nature", "hiking"),     # national park + trails
+        ("nature", "picnic"),     # parks for relaxing and eating
+        ("nature", "kids"),       # wildlife reserves + family
+        ("arts", "food"),         # gallery district + restaurants
+        ("arts", "history"),      # cultural venues + historic sites
+        ("landmarks", "food"),    # tourist areas with great food
     ]
     multi_n = 2 if args.dry_run else 7
     logger.info("Generating multi-label examples for %d pairs...", len(multi_pairs))
