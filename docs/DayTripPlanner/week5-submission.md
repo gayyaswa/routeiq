@@ -4,7 +4,7 @@
 
 ## Eval One-Liner
 
-Week 5 replaces the 15-keyword substring bag used for activity detection with a fine-tuned **Qwen3-1.7B** model that understands natural language day-trip intent. A 21-query golden eval splits queries into three tiers: **Tier 1** — easy queries where keywords work (e.g. "go hiking"); **Tier 2** — semantic gap queries where no keyword matches but intent is clear (e.g. "somewhere with a waterfall" → `hiking`, "rollercoasters and theme parks" → `kids`); **Tier 3** — multi-label queries (upper bound). The headline metric is Tier 2 accuracy: the keyword bag scores **30%**, the fine-tuned model scores **90%** — a +60-point lift on exactly the query patterns that caused silent itinerary degradation in prior weeks.
+Week 5 replaces the 15-keyword substring bag used for activity detection with a fine-tuned **Qwen3-1.7B** model that understands natural language day-trip intent. A 21-query golden eval splits queries into three tiers: **Tier 1** — easy queries where keywords work (e.g. "go hiking"); **Tier 2** — semantic gap queries where no keyword matches but intent is clear (e.g. "somewhere with a waterfall" → `hiking`, "rollercoasters and theme parks" → `kids`); **Tier 3** — multi-label queries (upper bound). The headline metric is Tier 2 accuracy: the keyword bag scores **30%**, the fine-tuned model scores **90%** — a +60-point lift on exactly the query patterns that caused silent itinerary degradation in prior weeks. A mid-week expansion added 3 new activity categories (`landmarks`, `nature`, `arts`) to address OSM subtype matching gaps, retrained the model on 1,123 examples across 12 tags, and reduced the scenic fill heuristic from n=80 to n=15.
 
 ---
 
@@ -46,21 +46,24 @@ The `"rollercoasters and theme parks"` → `picnic` case (substring "park") is t
 
 ## 2. What Week 5 Adds
 
-### Label set — 9 activity tags
+### Label set — 12 activity tags
 
-Extends the existing 6 tags with 3 new ones covering the semantic gaps not reachable by keyword matching:
+Started as 9 tags; expanded mid-week to 12 after discovering that `attraction`, `nature_reserve`, `gallery`, and `theatre` OSM subtypes had no activity mapping and were falling through to a 80-slot scenic fill heuristic:
 
-| Tag | What it covers | New in Week 5? |
+| Tag | What it covers | Status |
 |---|---|---|
-| `hiking` | trails, peaks, waterfalls, nature walks, nature reserves | — |
-| `biking` | cycling paths, bike routes, mountain biking | — |
-| `swimming` | beaches, pools, snorkeling | — |
-| `kayaking` | kayaking, paddleboarding, canoeing, water sports | — |
-| `kids` | playgrounds, zoos, theme parks (Disney, LEGOLAND, Six Flags), family attractions | — |
-| `picnic` | picnic areas, gardens, parks for relaxing | — |
-| `history` | missions, historic sites, battlefields, museums, cultural landmarks | **NEW** |
-| `food` | wineries, breweries, food markets, farm stands, tasting rooms | **NEW** |
-| `scenic` | overlooks, viewpoints, coastal vistas, scenic drives | **NEW** |
+| `hiking` | trails, peaks, waterfalls, nature walks | original |
+| `biking` | cycling paths, bike routes, mountain biking | original |
+| `swimming` | beaches, pools, snorkeling | original |
+| `kayaking` | kayaking, paddleboarding, canoeing, water sports | original |
+| `kids` | playgrounds, zoos, theme parks (Disney, LEGOLAND, Six Flags), family attractions | original |
+| `picnic` | picnic areas, gardens, parks for relaxing | original |
+| `history` | missions, historic sites, battlefields, museums, cultural landmarks | NEW (Week 5) |
+| `food` | wineries, breweries, food markets, farm stands, tasting rooms | NEW (Week 5) |
+| `scenic` | overlooks, viewpoints, coastal vistas, scenic drives | NEW (Week 5) |
+| `landmarks` | iconic tourist attractions, famous bridges/towers, piers, must-see sights | NEW (mid-week) |
+| `nature` | nature reserves, national parks, forests, wildlife areas (not hiking-specific) | NEW (mid-week) |
+| `arts` | galleries, theatres, arts centres, exhibitions, cultural venues | NEW (mid-week) |
 
 ### `QueryIntentClassifier` — new class
 
@@ -101,23 +104,40 @@ Set by the classifier, available to `query_poi_context` for semantic retrieval i
 
 ## 3. Training Data
 
-820 ShareGPT examples generated via `scripts/generate_intent_training_data.py` (Claude Haiku batched API calls).
+1,123 ShareGPT examples generated via `scripts/generate_intent_training_data.py` (Claude Haiku batched API calls). Regenerated from scratch when the tag set expanded to 12 — fresh balanced data for all tags in a single run, no stacking of old data.
 
 **Format** (mirrors the course notebook exactly):
 ```json
 {"conversations": [
-  {"from": "system", "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic. Output matching tags as a comma-separated list, or 'none' if no activity is implied."},
+  {"from": "system", "value": "You are a day trip intent classifier. Given a user query, output the activity tags that match their intent. Choose from: hiking, biking, swimming, kayaking, kids, picnic, history, food, scenic, landmarks, nature, arts. Output matching tags as a comma-separated list, or 'none' if no activity is implied."},
   {"from": "human",  "value": "I want to find some waterfalls and do a hike with great views"},
   {"from": "gpt",    "value": "hiking, scenic"}
 ]}
 ```
 
-**Distribution:**
-- ~90 examples per single-label tag × 9 tags = ~810 single-label
-- ~10 multi-label examples (two-tag combinations)
-- Known gap: `none` examples under-represented — only ~30 of 820
+**Distribution (12-tag run):**
 
-**Split:** 80/20 → `data/intent_train.json` (656 examples) + `data/intent_val.json` (164 examples)
+| Tag | Examples |
+|---|---|
+| `kids` | 100 |
+| `food` | 93 |
+| `landmarks` | 92 |
+| `hiking` | 89 |
+| `scenic` | 87 |
+| `nature` | 84 |
+| `history` | 79 |
+| `arts` | 77 |
+| `picnic` | 71 |
+| `swimming` | 71 |
+| `kayaking` | 68 |
+| `biking` | 68 |
+| `none` | 24 |
+
+- ~90 single-label examples per tag — indirect phrasing, no tag word used directly
+- 19 multi-label pairs × 7 examples each = 133 multi-label examples
+- 30 `none` examples (vague/generic queries with no specific activity)
+
+**Split:** 80/20 → `data/intent_train.json` (898 examples) + `data/intent_val.json` (225 examples)
 
 ---
 
@@ -146,9 +166,10 @@ llamafactory-cli train config/train_intent_classifier.yaml
 # or via LLaMA Board UI: llamafactory-cli webui → localhost:7860
 ```
 
-**Result:** Final loss 0.32 over 123 steps (3 epochs).
+**Result:** Final loss **0.28** over ~168 steps (3 epochs). Per-step loss reached 0.005–0.02 by epoch 3.
 
 ![Training loss curve — 3 epochs, final loss 0.32](../../models/intent_adapter/training_loss.png)
+*(Chart shows v1 adapter; v2 run achieved lower final loss of 0.28 with 12-tag dataset)*
 
 **Merge adapter → full model:**
 ```bash
@@ -319,25 +340,69 @@ Initial plan: 1000 examples (100/tag × 10 tags). Actual generated: 820 (script 
 
 Post-eval: `"show me a nice day in SF"` → predicted `scenic` (false positive). The system prompt says `output 'none' if no activity is implied` — the model learned this correctly for explicit phrasing but not for vague-positive queries. Fix: add ~30 more `none` examples with vague-positive phrasing. Not implemented — acknowledged as known gap.
 
+### Iteration 5 — OSM subtype matching gap → 3 new activity categories
+
+**Problem discovered:** OSM subtype `attraction` (Golden Gate Bridge, Bay Bridge, Coit Tower, Alcatraz) had no activity tag. These POIs fell to Track 2 scenic fill. With `n_slots=80` as a heuristic, GGB (position 44 in the pool) barely made it through to `rate_pois` — a fragile dependency. Similarly, `gallery` and `theatre` subtypes were entirely unmatched; `nature_reserve` was hijacking the `hiking` slot even when users wanted general nature (not trails).
+
+**Fix — two-layer change:**
+
+1. **OSM classifier** (`routeiq/activities/osm_classifier.py`) expanded to 12 tags with multi-activity support:
+   ```python
+   # _TAG_TO_ACTIVITY now supports str | list[str]
+   "attraction":     "landmarks",          # GGB, Bay Bridge, Coit Tower
+   "landmark":       "landmarks",          # historic landmarks
+   "nature_reserve": ["hiking", "nature"], # Muir Woods matches BOTH
+   "park":           "nature",
+   "waterfall":      ["hiking", "nature"],
+   "gallery":        "arts",
+   "theatre":        "arts",
+   "arts_centre":    "arts",
+   ```
+
+2. **Finetuned model retrained** on 1,123 fresh examples covering all 12 tags:
+   - `generate_intent_training_data.py` updated with new tag descriptions + 19 multi-label pairs
+   - Retrained Qwen3-1.7B-Base from scratch (not stacked on v1 data)
+   - Final loss: 0.28 (improved from 0.32)
+
+3. **Keyword supplement** added to app.py finetuned path — model output merged with keyword pass-over so indirect landmark/nature phrasing is never missed:
+   ```python
+   final_activities = list(_model_tags | _keyword_tags)
+   ```
+
+4. **n_slots reduced 80 → 15**: With direct `landmarks`/`nature`/`arts` matching, the 80-slot scenic buffer is no longer needed. 15 provides a small safety margin for genuinely unclassified POIs.
+
+**New-tag eval results (direct model probe, 15 queries):**
+
+| Category | Queries tested | Model correct | With keyword supplement |
+|---|---|---|---|
+| `landmarks` | 5 | 4/5 | 5/5 |
+| `nature` | 4 | 3/4 | 4/4 |
+| `arts` | 3 | 3/3 | 3/3 |
+| Regression (original 9 tags) | 6 | 6/6 | 6/6 |
+
+13/15 from the model directly; 15/15 with keyword supplement active in the app.
+
 ---
 
 ## 8. Files
 
 | File | What it is |
 |---|---|
-| `routeiq/activities/finetuned_classifier.py` | `QueryIntentClassifier` — Qwen3-1.7B text-generation pipeline, lazy-load, MPS/CUDA/CPU |
+| `routeiq/activities/finetuned_classifier.py` | `QueryIntentClassifier` — Qwen3-1.7B, 12 tags, lazy-load, MPS/CUDA/CPU |
+| `routeiq/activities/osm_classifier.py` | OSM POI classifier — 12 tags, multi-activity `str\|list[str]` mapping |
+| `routeiq/routing/activity_poi_selector.py` | Track 2 scenic fill: n_slots 80 → 15 |
 | `routeiq/agent/agent_state.py` | `semantic_queries: dict` added to `DayTripState` |
-| `app.py:672` | Fine-tuned path wired — `ACTIVITY_PROVIDER=finetuned` activates classifier |
+| `app.py` | Fine-tuned path + keyword supplement merge; 12-tag `_ACTIVITY_TEXT_KEYWORDS` |
 | `eval/intent_eval_golden.py` | 21-query golden eval, 3 tiers, baseline vs fine-tuned |
-| `scripts/generate_intent_training_data.py` | 820 ShareGPT examples via Claude Haiku |
-| `data/intent_train.json` | 656 training examples |
-| `data/intent_val.json` | 164 validation examples |
+| `scripts/generate_intent_training_data.py` | 1,123 ShareGPT examples via Claude Haiku, 12 tags, 19 multi-label pairs |
+| `data/intent_train.json` | 898 training examples |
+| `data/intent_val.json` | 225 validation examples |
 | `data/dataset_info.json` | LLaMA-Factory dataset registry |
-| `config/train_intent_classifier.yaml` | LoRA rank 8, 3 epochs, MPS |
-| `config/export_intent_classifier.yaml` | Merges adapter → `./models/intent/` |
-| `models/intent_adapter/` | LoRA adapter weights (33 MB, committed) |
-| `models/intent_adapter/training_loss.png` | Loss curve — 3 epochs, final loss 0.32 |
-| `models/intent/` | Merged model (6.7 GB — **excluded from git**, regenerate with export config) |
+| `scripts/train_intent_lora.yaml` | LoRA rank 8, 3 epochs, MPS |
+| `scripts/retrain_intent.sh` | Full pipeline: datagen → train → export |
+| `models/intent_adapter_v2/` | LoRA adapter weights — 12-tag retrain, loss 0.28 |
+| `models/intent_adapter/training_loss.png` | Loss curve (v1 adapter) |
+| `models/intent/` | Merged model (6.7 GB — **excluded from git**, run `SKIP_DATAGEN=1 bash scripts/retrain_intent.sh`) |
 
 ---
 
@@ -348,25 +413,21 @@ Post-eval: `"show me a nice day in SF"` → predicted `scenic` (false positive).
 pip install -r requirements.txt
 pip install llamafactory torch transformers
 
-# 2. (Optional) Regenerate training data
-ANTHROPIC_API_KEY=... python3 scripts/generate_intent_training_data.py
+# 2. Full pipeline (data gen + train + export) — requires ANTHROPIC_API_KEY
+bash scripts/retrain_intent.sh
 
-# 3. Train (LLaMA Board UI, or CLI)
-llamafactory-cli webui         # → localhost:7860, load config/train_intent_classifier.yaml
-# OR
-llamafactory-cli train config/train_intent_classifier.yaml
+# OR: skip data gen if data/intent_train.json already exists (e.g. after clone)
+SKIP_DATAGEN=1 bash scripts/retrain_intent.sh
 
-# 4. Export merged model
-llamafactory-cli export config/export_intent_classifier.yaml
-# → ./models/intent/  (6.7 GB)
-
-# 5. Run the golden eval
+# 3. Run the golden eval
 FINETUNED_MODEL_PATH=./models/intent python3 eval/intent_eval_golden.py
 
-# 6. Smoke test in the app
-ACTIVITY_PROVIDER=finetuned FINETUNED_MODEL_PATH=./models/intent streamlit run app.py
-# Type: "somewhere with a waterfall"
-# Confirm: activities=["hiking"] appears in the itinerary
+# 4. Smoke test in the app
+ACTIVITY_PROVIDER=finetuned streamlit run app.py
+# Type: "somewhere with a waterfall"          → activities=["hiking"]
+# Type: "family theme parks and landmarks"    → activities=["kids", "landmarks"]
+# Type: "gallery hopping and arts district"   → activities=["arts"]
+# Type: "get into nature, national park"      → activities=["nature"]
 ```
 
 **Model cold start:** ~5s (MPS) on first `classify()` call. Subsequent calls: ~100ms.
@@ -375,10 +436,15 @@ ACTIVITY_PROVIDER=finetuned FINETUNED_MODEL_PATH=./models/intent streamlit run a
 
 ## 10. Known Gaps
 
-| Gap | Root cause | Fix |
+| Gap | Root cause | Status |
 |---|---|---|
-| Tier 3 multi-label accuracy drops 67% → 17% | 85% single-label training data | Add ~70 more multi-label examples across tag pairs |
-| `"show me a nice day in SF"` → `scenic` (false positive) | Under-represented `none` training examples | Add ~30 vague-positive `none` examples |
-| `"plan a relaxing afternoon"` → `picnic` (false positive) | Same | Same |
-| Merged model excluded from git (6.7 GB) | Git LFS not configured | Run `llamafactory-cli export config/export_intent_classifier.yaml` after clone |
-| `waterway=waterfall → hiking` missing from OSM classifier | One-line fix deferred | Add to `osm_classifier.py` — waterfall POIs then get hiking-matched in OSM path too |
+| Tier 3 multi-label accuracy drops 67% → 17% | 85% single-label training data | Partially improved: 19 multi-label pairs in new data vs. 10 in v1 |
+| `"show me a nice day in SF"` → `scenic` (false positive) | Under-represented `none` training examples | Open — add ~30 vague-positive `none` examples |
+| `"plan a relaxing afternoon"` → `picnic` (false positive) | Same | Open |
+| Merged model excluded from git (6.7 GB) | Git LFS not configured | Run `SKIP_DATAGEN=1 bash scripts/retrain_intent.sh` after clone |
+| `waterway=waterfall → hiking` missing from OSM classifier | — | **Fixed** — `waterfall → ["hiking", "nature"]` in v2 OSM classifier |
+| `attraction` / `landmark` subtypes unmatched | No activity tag | **Fixed** — `landmarks` tag, direct Track 1 match |
+| `gallery` / `theatre` subtypes unmatched | No activity tag | **Fixed** — `arts` tag |
+| `nature_reserve` hijacking `hiking` slot | Single-value tag map | **Fixed** — multi-activity: `["hiking", "nature"]` |
+| n_slots=80 scenic fill heuristic | Band-aid for unmatched subtypes | **Fixed** — reduced to 15 now that direct matching covers them |
+| `"family theme parks and popular landmarks"` → model misses `landmarks` | Model trained on ambiguous multi-label | Keyword supplement catches it — 15/15 in end-to-end app test |

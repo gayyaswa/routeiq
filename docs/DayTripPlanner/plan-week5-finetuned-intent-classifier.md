@@ -47,24 +47,36 @@ reserves a dedicated slot regardless of scenic score.
 
 ---
 
-## 9 Activity Tags (agreed label set)
+## 12 Activity Tags (final label set)
 
-Extends the existing 6 with 3 new tags covering the most common semantic gaps:
+Started as 9 tags; expanded to 12 mid-week to fix the OSM subtype matching gap:
 
-| Tag | What it covers | Existing? |
+| Tag | What it covers | Origin |
 |---|---|---|
-| `hiking` | trails, peaks, waterfalls, nature walks, nature reserves | ✅ |
-| `biking` | cycling paths, bike routes, mountain biking | ✅ |
-| `swimming` | beaches, pools, snorkeling | ✅ |
-| `kayaking` | kayaking, paddleboarding, canoeing, water sports | ✅ |
-| `kids` | playgrounds, zoos, theme parks (Disney, LEGOLAND, Six Flags), family attractions | ✅ |
-| `picnic` | picnic areas, gardens, parks for relaxing | ✅ |
-| `history` | missions, historic sites, battlefields, museums, cultural landmarks | **NEW** |
-| `food` | wineries, breweries, food markets, farm stands, tasting rooms | **NEW** |
-| `scenic` | overlooks, viewpoints, coastal vistas, scenic drives | **NEW** |
+| `hiking` | trails, peaks, waterfalls, nature walks | original |
+| `biking` | cycling paths, bike routes, mountain biking | original |
+| `swimming` | beaches, pools, snorkeling | original |
+| `kayaking` | kayaking, paddleboarding, canoeing, water sports | original |
+| `kids` | playgrounds, zoos, theme parks (Disney, LEGOLAND, Six Flags) | original |
+| `picnic` | picnic areas, gardens, parks for relaxing | original |
+| `history` | missions, historic sites, battlefields, museums, cultural landmarks | added Week 5 |
+| `food` | wineries, breweries, food markets, farm stands, tasting rooms | added Week 5 |
+| `scenic` | overlooks, viewpoints, coastal vistas, scenic drives | added Week 5 |
+| `landmarks` | iconic tourist attractions, famous bridges/towers, must-see sights | **added mid-week** |
+| `nature` | nature reserves, national parks, forests, wildlife areas (not hiking-specific) | **added mid-week** |
+| `arts` | galleries, theatres, arts centres, cultural venues | **added mid-week** |
 
-**Theme parks** (Disney, LEGOLAND, Universal, Six Flags) → `kids`. OSM tags them as
-`tourism=theme_park`; the OSM classifier already maps `theme_park → kids`.
+**Why landmarks/nature/arts were added:** OSM subtype `attraction` (Golden Gate Bridge, Coit Tower,
+Bay Bridge, Alcatraz) had no activity tag — those POIs fell through to a scenic fill heuristic
+(n_slots=80). Adding `landmarks` as a direct tag gives them a Track 1 match. `nature_reserve`
+(Muir Woods) was hijacking the `hiking` slot; adding `nature` lets it match both. `gallery` and
+`theatre` subtypes were entirely unmatched before.
+
+**OSM subtype → activity mapping expanded** (`routeiq/activities/osm_classifier.py`):
+- Multi-activity values now supported: `nature_reserve → ["hiking", "nature"]`
+- New mappings: `attraction → landmarks`, `landmark → landmarks`, `park → nature`,
+  `waterfall → ["hiking", "nature"]`, `gallery → arts`, `theatre → arts`, `arts_centre → arts`
+- `n_slots` (Track 2 scenic buffer): 80 → 15 (direct matching now covers most subtypes)
 
 ---
 
