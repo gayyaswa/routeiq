@@ -42,3 +42,7 @@ docs/eval_week4/eval-plan-session-*.md
 models/intent/
 # Intermediate training checkpoints (adapter_model.safetensors is committed)
 models/intent_adapter/checkpoint-*/
+models/intent_adapter_v2/checkpoint-*/
+
+# Local user config (machine-specific)
+cache/user_config.yaml

@@ -1,0 +1,10 @@
+### LLaMA Factory export config — merges LoRA adapter into full model weights
+### Run AFTER training: llamafactory-cli export scripts/export_intent_lora.yaml
+
+model_name_or_path: Qwen/Qwen3-1.7B-Base
+adapter_name_or_path: /Users/ayyaswamy/projects/routeiq/models/intent_adapter_v2
+finetuning_type: lora
+template: default
+export_dir: /Users/ayyaswamy/projects/routeiq/models/intent
+export_size: 2
+export_legacy_format: false
