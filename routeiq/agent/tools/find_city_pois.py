@@ -21,4 +21,13 @@ def find_city_pois(city: str) -> str:
         JSON array of up to 200 POI dicts (name, category, lat, lon, osm_id, subtype, wikipedia_tag).
     """
     pois = get_kg().get_pois_for_city(city)
+    # Sort by Wikipedia presence so notable landmarks are always in the top 200.
+    # en: wikipedia = most notable; other-language wiki = some notability; none = least.
+    def _rank(p):
+        if p.wikipedia_tag and p.wikipedia_tag.startswith("en:"):
+            return 0
+        if p.wikipedia_tag:
+            return 1
+        return 2
+    pois = sorted(pois, key=_rank)
     return json.dumps([dataclasses.asdict(p) for p in pois[:200]])

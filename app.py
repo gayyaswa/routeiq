@@ -334,11 +334,44 @@ _log("background init thread started — page renders now")
 
 @st.cache_resource
 def _load_day_trip_resources():
+    import time as _t
+    t0 = _t.perf_counter()
     from routeiq.graph.knowledge_graph import get_kg
-    from routeiq.agent import build_day_trip_graph
     kg = get_kg()
+    _logger.info("KG ready in %.2fs (%d nodes)", _t.perf_counter() - t0, kg.graph.number_of_nodes())
+    t1 = _t.perf_counter()
+    from routeiq.agent import build_day_trip_graph
     graph = build_day_trip_graph()
+    _logger.info("Agent graph built in %.2fs", _t.perf_counter() - t1)
     return kg, graph
+
+
+def _patch_stops(stops: list, city: str) -> list:
+    """Backfill photo_urls / rating / quotes the LLM dropped when building ItineraryStop."""
+    if not stops:
+        return stops
+    from routeiq.rag.poi_knowledge_store import POIKnowledgeStore
+    knowledge = POIKnowledgeStore().get_metadata(city, [s.get("name", "") for s in stops])
+    for stop in stops:
+        meta = knowledge.get(stop.get("name", ""))
+        if not meta:
+            continue
+        if not stop.get("photo_urls"):
+            stop["photo_urls"] = meta.get("photo_urls") or []
+        if stop.get("rating") is None:
+            stop["rating"] = meta.get("rating")
+        if stop.get("review_count") is None:
+            stop["review_count"] = meta.get("review_count")
+        if not stop.get("visitor_quote"):
+            # Prefer review_snippet; fall back to first item in all_snippets
+            snippet = meta.get("review_snippet")
+            if not snippet:
+                all_s = meta.get("all_snippets") or []
+                snippet = all_s[0] if all_s else None
+            if snippet:
+                src = meta.get("review_source") or ""
+                stop["visitor_quote"] = f"{src}: {snippet}" if src else snippet
+    return stops
 
 
 def _normalize_city_name(city: str) -> str:
@@ -524,11 +557,14 @@ tab1, tab2 = st.tabs(["🏙 Day Trip Planner", "🗺 Route Planner"])
 # TAB 1 — Day Trip Planner
 # ═══════════════════════════════════════════════════════════════════════════════
 
-import re as _re
 import json as _json
-_US_CITIES: list[str] = _json.load(open("data/us_cities.json"))
 _OTHER_CITY_OPTION = "✈ Other city (type below)…"
-_CITY_OPTIONS = _US_CITIES + [_OTHER_CITY_OPTION]
+
+@st.cache_data
+def _load_city_options() -> list[str]:
+    return _json.load(open("data/us_cities.json")) + [_OTHER_CITY_OPTION]
+
+_CITY_OPTIONS = _load_city_options()
 
 _ACTIVITY_TEXT_KEYWORDS: dict[str, list[str]] = {
     "hiking":    ["hiking", "hike", "trail", "trails", "trek", "trekking"],
@@ -539,7 +575,11 @@ _ACTIVITY_TEXT_KEYWORDS: dict[str, list[str]] = {
     "picnic":    ["picnic"],
     "history":   ["history", "historic", "museum", "mission", "ruins", "castle", "fort", "heritage", "battlefield"],
     "food":      ["food", "restaurant", "winery", "brewery", "bar", "nightlife", "cocktail", "jazz", "lunch", "dinner", "coffee", "cafe"],
-    "scenic":    ["scenic", "viewpoint", "overlook", "panoram", "vista", "view", "attraction", "attractions", "sightseeing", "places to visit"],
+    "scenic":    ["scenic", "viewpoint", "overlook", "panoram", "vista", "view"],
+    "landmarks": ["landmark", "landmarks", "attraction", "attractions", "sightseeing", "places to visit",
+                  "must see", "must-see", "iconic", "top sights", "famous spots", "tourist"],
+    "nature":    ["nature", "national park", "wildlife", "forest", "reserve", "wilderness", "green spaces"],
+    "arts":      ["art", "gallery", "galleries", "theatre", "theater", "arts", "exhibition", "cultural", "museum of art"],
 }
 
 def _infer_activities_from_text(text: str) -> list[str]:
@@ -549,16 +589,23 @@ def _infer_activities_from_text(text: str) -> list[str]:
 
 
 def _cached_city_names() -> list[str]:
-    """Cities already in the local KG + rating cache — shown as hint under city selectbox."""
-    from routeiq.graph.knowledge_graph import get_kg
-    names: set[str] = set(get_kg().known_cities())
-    rating_dir = Path("cache/ratings")
-    if rating_dir.exists():
-        for f in rating_dir.glob("llm_synthetic_*.json"):
-            m = _re.match(r"llm_synthetic_(.+)_([a-z]{2})\.json", f.name)
-            if m:
-                names.add(f"{m.group(1).replace('_', ' ').title()}, {m.group(2).upper()}")
-    return sorted(names)
+    """Cities with POI knowledge already cached — shown as hint under city selectbox."""
+    return _CACHED_CITY_NAMES
+
+def _compute_cached_city_names() -> list[str]:
+    try:
+        import chromadb
+        client = chromadb.PersistentClient(path="./cache/chroma")
+        col = client.get_or_create_collection("poi_knowledge")
+        ids = col.get(limit=5000, include=[])["ids"]
+        return sorted({
+            id_.split("::")[0].replace("_", " ").title()
+            for id_ in ids if "::" in id_
+        })
+    except Exception:
+        return []
+
+_CACHED_CITY_NAMES: list[str] = _compute_cached_city_names()
 
 with tab1:
     st.markdown("**Plan a scenic day in any city — the agent picks stops, you approve.**")
@@ -570,7 +617,7 @@ with tab1:
         dt_city_sel = st.selectbox(
             "City",
             options=_CITY_OPTIONS,
-            index=0,
+            index=16,
             key="dt_city_sel",
         )
         if dt_city_sel == _OTHER_CITY_OPTION:
@@ -652,14 +699,6 @@ with tab1:
                 )
                 st.stop()
 
-        # Plan A — prefetch POI knowledge (Wikipedia + ratings + activity tags) for this
-        # city before the agent runs. Warm cities (within the 21-day TTL) return instantly;
-        # cold cities pay the provider-call cost here instead of inside the ReAct loop.
-        from routeiq.rag.city_prefetcher import CityPrefetcher
-        city_pois = kg.get_pois_for_city(city_short)
-        with st.spinner(f"Building POI knowledge base for {dt_city_norm}…"):
-            CityPrefetcher().prefetch(dt_city_norm, city_pois)
-
         _logger.info("plan_btn clicked city=%r start_time=%r hours=%s phase_was=%s",
                      dt_city, dt_start, dt_hours, dt_phase)
 
@@ -681,20 +720,23 @@ with tab1:
         st.session_state["dt_result_holder"] = rh
         st.session_state["dt_progress"] = dt_progress
         st.session_state["dt_progress_thread_id"] = new_thread_id
-        _explicit: list[str] = []
         _semantic_queries: dict = {}
-        if os.getenv("ACTIVITY_PROVIDER", "osm").lower() == "finetuned" and not _explicit:
+        if os.getenv("ACTIVITY_PROVIDER", "osm").lower() == "finetuned" and dt_user_context.strip():
             from routeiq.activities.finetuned_classifier import create_query_intent_classifier
             _clf = create_query_intent_classifier()
             _clf_result = _clf.classify(dt_user_context)
-            final_activities = _clf_result["activities"]
+            _model_tags = set(_clf_result["activities"])
+            # Keyword pass supplements the model for indirect phrasing it may miss
+            # (e.g. "popular attractions" → landmarks, "national park" → nature).
+            _keyword_tags = set(_infer_activities_from_text(dt_user_context))
+            final_activities = list(_model_tags | _keyword_tags)
             _semantic_queries = _clf_result["semantic_queries"]
-            _logger.info("plan_btn: finetuned classifier → activities=%s", final_activities)
+            _logger.info("plan_btn: finetuned classifier → model=%s keyword=%s final=%s",
+                         sorted(_model_tags), sorted(_keyword_tags), sorted(final_activities))
         else:
-            _inferred = _infer_activities_from_text(dt_user_context) if not _explicit else []
-            final_activities = _explicit or _inferred
-            if _inferred:
-                _logger.info("plan_btn: inferred activities from user_context text: %s", _inferred)
+            final_activities = _infer_activities_from_text(dt_user_context)
+            if final_activities:
+                _logger.info("plan_btn: keyword-inferred activities: %s", final_activities)
 
         initial_state = {
             "messages": [],
@@ -798,9 +840,10 @@ with tab1:
         with _dt_area.container():
             draft = st.session_state.get("dt_draft") or {}
             stops = draft.get("stops") or []
+            city_val = st.session_state.get("dt_city_val", dt_city)
 
             if stops:
-                city_val = st.session_state.get("dt_city_val", dt_city)
+                stops = _patch_stops(stops, city_val)
                 hours_val = st.session_state.get("dt_hours_val", dt_hours)
                 st.markdown(
                     f"**Draft itinerary — {city_val} · {hours_val}h · {len(stops)} stops**"
@@ -923,6 +966,7 @@ with tab1:
             hours_val = st.session_state.get("dt_hours_val", "")
 
             if stops:
+                stops = _patch_stops(stops, city_val)
                 st.markdown(f"**{city_val} · {hours_val}h · {len(stops)} stops**")
                 map_col, cards_col = st.columns([3, 2])
 

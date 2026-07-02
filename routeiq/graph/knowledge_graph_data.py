@@ -75,11 +75,19 @@ _ALL_CITY_REGIONS: dict[str, str] = {**_CITY_REGIONS, **_NYC_CITY_REGIONS}
 _VALID_CATEGORIES = {c["name"] for c in CATEGORIES}
 
 # Anchor POIs — always present; used as fallback when master cache is missing.
+# Also covers iconic landmarks OSM tags as infrastructure (Bay Bridge, Ferry Building)
+# rather than tourism, so they'd otherwise be excluded from our POI fetch.
 _ANCHOR_POIS: list[dict] = [
-    {"osm_id": "('way', 370672707)",    "name": "Golden Gate Bridge",  "category": "tourism",  "lat": 37.8203, "lon": -122.4786},
-    {"osm_id": "('relation', 5504536)", "name": "Fort Point",          "category": "historic", "lat": 37.8106, "lon": -122.4771},
-    {"osm_id": "('way', 28824850)",     "name": "Coit Tower",          "category": "historic", "lat": 37.8024, "lon": -122.4058},
-    {"osm_id": "('way', 288371295)",    "name": "Palace of Fine Arts",  "category": "tourism",  "lat": 37.8029, "lon": -122.4484},
+    # ── San Francisco ─────────────────────────────────────────────────────────
+    {"osm_id": "('way', 370672707)",      "name": "Golden Gate Bridge",            "category": "tourism",  "lat": 37.8203,  "lon": -122.4786, "wikipedia_tag": "en:Golden Gate Bridge",                    "subtype": "attraction"},
+    {"osm_id": "('relation', 5504536)",   "name": "Fort Point",                    "category": "historic", "lat": 37.8106,  "lon": -122.4771, "wikipedia_tag": "en:Fort Point, San Francisco",             "subtype": "attraction"},
+    {"osm_id": "('way', 28824850)",       "name": "Coit Tower",                    "category": "historic", "lat": 37.8024,  "lon": -122.4058, "wikipedia_tag": "en:Coit Tower",                            "subtype": "attraction"},
+    {"osm_id": "('way', 288371295)",      "name": "Palace of Fine Arts",           "category": "tourism",  "lat": 37.8029,  "lon": -122.4484, "wikipedia_tag": "en:Palace of Fine Arts",                   "subtype": "attraction"},
+    {"osm_id": "anchor::bay_bridge_sf",   "name": "San Francisco-Oakland Bay Bridge", "category": "tourism", "lat": 37.7983, "lon": -122.3778, "wikipedia_tag": "en:San Francisco–Oakland Bay Bridge",      "subtype": "attraction"},
+    {"osm_id": "anchor::ferry_building",  "name": "San Francisco Ferry Building",  "category": "tourism",  "lat": 37.7955,  "lon": -122.3937, "wikipedia_tag": "en:San Francisco Ferry Building",          "subtype": "attraction"},
+    {"osm_id": "anchor::crissy_field",    "name": "Crissy Field",                  "category": "natural",  "lat": 37.8032,  "lon": -122.4669, "wikipedia_tag": "en:Crissy Field",                          "subtype": "park"},
+    {"osm_id": "anchor::twin_peaks_sf",   "name": "Twin Peaks Scenic Overlook",    "category": "natural",  "lat": 37.7534,  "lon": -122.4478, "wikipedia_tag": "en:Twin Peaks (San Francisco)",            "subtype": "viewpoint"},
+    {"osm_id": "anchor::haight_ashbury",  "name": "Haight-Ashbury",               "category": "tourism",  "lat": 37.7692,  "lon": -122.4481, "wikipedia_tag": "en:Haight-Ashbury",                        "subtype": "attraction"},
 ]
 
 
@@ -135,6 +143,7 @@ def _load_bay_area_pois() -> list[dict]:
         raw = json.load(f)
 
     seen: set[str] = set()
+    seen_names: set[str] = set()
     pois: list[dict] = []
     for p in raw:
         if not p.get("name") or not p.get("category"):
@@ -143,6 +152,7 @@ def _load_bay_area_pois() -> list[dict]:
         if osm_id in seen:
             continue
         seen.add(osm_id)
+        seen_names.add(p["name"])
         city = _nearest_city(p["lat"], p["lon"])
         pois.append({
             "osm_id": osm_id,
@@ -155,6 +165,26 @@ def _load_bay_area_pois() -> list[dict]:
             "region": _CITY_REGIONS.get(city, "Bay Area"),
             "wikipedia_tag": p.get("wikipedia_tag"),
         })
+
+    # Always merge anchors — ensures iconic landmarks missing from OSM tourism tags
+    # (Bay Bridge, Ferry Building, etc.) are present regardless of the master cache.
+    anchor_by_name = {p["name"]: p for p in _ANCHOR_POIS}
+
+    # Patch wikipedia_tag onto existing OSM entries that are missing it.
+    for existing in pois:
+        anchor = anchor_by_name.get(existing["name"])
+        if anchor and anchor.get("wikipedia_tag") and not existing.get("wikipedia_tag"):
+            existing["wikipedia_tag"] = anchor["wikipedia_tag"]
+
+    # Add anchors whose name isn't in the OSM cache at all.
+    for p in _ANCHOR_POIS:
+        if p["osm_id"] in seen or p["name"] in seen_names:
+            continue
+        entry = dict(p)
+        entry["city"] = _nearest_city(p["lat"], p["lon"])
+        entry["region"] = _CITY_REGIONS.get(entry["city"], "Bay Area")
+        pois.append(entry)
+
     return _dedup_and_sort(pois)
 
 

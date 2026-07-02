@@ -132,10 +132,18 @@ def render_dt_card(stop: dict, rank: int) -> str:
         )
 
     why_visit = (stop.get("why_visit") or "")[:200]
+    _desc_src = stop.get("description_source") or ""
+    _desc_badge = (
+        '<span style="background:#dbeafe;color:#1d4ed8;font-size:9px;font-weight:600;'
+        'padding:1px 5px;border-radius:6px;margin-left:4px;vertical-align:middle;">📖 Wikipedia</span>'
+        if _desc_src == "wikipedia" else
+        '<span style="background:#f3e8ff;color:#7c3aed;font-size:9px;font-weight:600;'
+        'padding:1px 5px;border-radius:6px;margin-left:4px;vertical-align:middle;">✨ AI</span>'
+        if _desc_src == "ai_generated" else ""
+    )
     why_html = (
-        f'<div style="font-size:12px;color:#555;line-height:1.4;margin-bottom:4px;'
-        f'display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">'
-        f'{why_visit}</div>'
+        f'<div style="font-size:12px;color:#555;line-height:1.4;margin-bottom:4px;">'
+        f'{why_visit}{_desc_badge}</div>'
     ) if why_visit else ""
 
     visitor_quote = stop.get("visitor_quote") or ""
@@ -155,12 +163,24 @@ def render_dt_card(stop: dict, rank: int) -> str:
     activities = (stop.get("activities") or [])[:3]
     badges_html = ""
     if activities:
+        _act_src = stop.get("activity_source") or ""
+        _act_src_pill = (
+            '<span style="background:#f3e8ff;color:#7c3aed;font-size:9px;font-weight:600;'
+            'padding:1px 5px;border-radius:6px;">✨ AI</span>'
+            if _act_src == "ai_generated" else
+            '<span style="background:#f0fdf4;color:#15803d;font-size:9px;font-weight:600;'
+            'padding:1px 5px;border-radius:6px;">OSM</span>'
+            if _act_src == "osm" else ""
+        )
         badges = "".join(
             f'<span style="background:#f1f5f9;color:#475569;font-size:10px;'
             f'padding:2px 7px;border-radius:10px;">{a}</span>'
             for a in activities
         )
-        badges_html = f'<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:4px;">{badges}</div>'
+        badges_html = (
+            f'<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:4px;">'
+            f'{badges}{_act_src_pill}</div>'
+        )
 
     hours = stop.get("hours") or ""
     hours_html = (

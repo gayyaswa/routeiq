@@ -1,5 +1,6 @@
 from __future__ import annotations
 import json
+import logging
 import os
 import time
 
@@ -8,6 +9,8 @@ from routeiq.ratings.base import POIRatingProvider, RatedPOI
 
 _CACHE_DIR = "./cache/ratings"
 _CACHE_TTL = 21 * 86400
+
+logger = logging.getLogger(__name__)
 
 
 class TavilyEnrichmentProvider(POIRatingProvider):
@@ -18,6 +21,7 @@ class TavilyEnrichmentProvider(POIRatingProvider):
         self._client = TavilyClient(api_key=api_key)
         self._llm = llm
         self._cache_dir = cache_dir
+        self.rate_limited = False  # set True when the plan limit is hit
         os.makedirs(cache_dir, exist_ok=True)
 
     @property
@@ -46,8 +50,10 @@ class TavilyEnrichmentProvider(POIRatingProvider):
             )
             data = resp.get("results", [])
         except Exception as e:
-            print(f"[tavily_enrich] bulk search error: {e}", flush=True)
-            data = []
+            logger.warning("[tavily_enrich] bulk search error: %s", e)
+            if "usage limit" in str(e).lower() or "rate limit" in str(e).lower():
+                self.rate_limited = True
+            return []  # don't cache errors — retry next run with fresh credits
         with open(path, "w") as f:
             json.dump(data, f)
         return data
@@ -66,8 +72,10 @@ class TavilyEnrichmentProvider(POIRatingProvider):
             )
             data = resp.get("results", [])
         except Exception as e:
-            print(f"[tavily_enrich] poi search error for {poi.name}: {e}", flush=True)
-            data = []
+            logger.warning("[tavily_enrich] poi search error for %s: %s", poi.name, e)
+            if "usage limit" in str(e).lower() or "rate limit" in str(e).lower():
+                self.rate_limited = True
+            return []  # don't cache errors — retry next run with fresh credits
         with open(path, "w") as f:
             json.dump(data, f)
         return data

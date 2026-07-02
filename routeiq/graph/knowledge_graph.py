@@ -1,13 +1,23 @@
 """NetworkX knowledge graph: POI/City/Region/Category nodes with typed edges (Registry pattern)."""
 from __future__ import annotations
 import dataclasses
+import logging
 import math
+import time
 from typing import Any
 import networkx as nx
 from routeiq.graph.knowledge_graph_data import POIS, CITIES, REGIONS, CATEGORIES, RELATIONSHIPS
 from routeiq.graph.poi import POI
 
+_logger = logging.getLogger(__name__)
+
 _POI_FIELDS = {f.name for f in dataclasses.fields(POI)}
+
+# How far beyond a city's OSM admin boundary to include POIs.
+# 0.10° ≈ 11 km — captures GGB (1.4 km), Muir Woods (10 km), Sausalito, Tiburon.
+# East Bay (Bay Bridge crossing ~11 km east) is excluded because the polygon
+# already extends east to the bay shore, so the buffer doesn't reach Oakland.
+_CITY_POI_RADIUS_DEG = 0.10
 
 _shared_instance: "RouteKnowledgeGraph | None" = None
 
@@ -31,7 +41,10 @@ class RouteKnowledgeGraph:
 
     def __init__(self) -> None:
         self._g: nx.DiGraph = nx.DiGraph()
+        self._near_poi_built = False
+        t0 = time.perf_counter()
         self._build()
+        _logger.info("RouteKnowledgeGraph built: %d nodes in %.2fs", self._g.number_of_nodes(), time.perf_counter() - t0)
 
     @property
     def graph(self) -> nx.DiGraph:
@@ -39,6 +52,7 @@ class RouteKnowledgeGraph:
 
     def enrich_poi(self, osm_id: str) -> dict:
         """Returns {city, region, category, nearby_poi_names} for a POI node."""
+        self._ensure_near_poi_edges()
         if osm_id not in self._g:
             return {}
         city = self._first_neighbor(osm_id, "LOCATED_IN")
@@ -82,26 +96,31 @@ class RouteKnowledgeGraph:
         return {d["name"] for n, d in self._g.nodes(data=True) if d.get("type") == "City"}
 
     def get_pois_for_city(self, city_name: str) -> list[POI]:
-        """Return POIs spatially contained within city_name's OSM administrative boundary.
+        """Return POIs within _CITY_POI_RADIUS_DEG of city_name's OSM admin boundary.
 
-        Uses geocode_to_gdf to fetch the real city polygon from OSM (cached per instance),
-        so correctness does not depend on the _nearest_city heuristic used when building
-        LOCATED_IN edges.  The LOCATED_IN pre-filter still runs as a fast coarse pass to
-        avoid polygon-checking every POI in the graph.
+        Results are cached per city name — repeated calls (e.g. find_city_pois →
+        select_pois_for_day in the same agent turn) return the cached list instantly.
         """
+        if not hasattr(self, "_city_pois_cache"):
+            self._city_pois_cache: dict[str, list[POI]] = {}
+        if city_name in self._city_pois_cache:
+            return self._city_pois_cache[city_name]
+
+        t0 = time.perf_counter()
         from shapely.geometry import Point
         short = city_name.split(",")[0].strip()
         city_poly = self._city_polygon(city_name)
+
+        # Compute the buffered polygon ONCE — not inside the 6000-node loop.
+        buf_poly = city_poly.buffer(_CITY_POI_RADIUS_DEG) if city_poly is not None else None
 
         result = []
         for node_id, data in self._g.nodes(data=True):
             if data.get("type") != "POI":
                 continue
             poi = POI(**{k: v for k, v in data.items() if k in _POI_FIELDS})
-            if city_poly is not None:
-                # Polygon is authoritative — supersedes LOCATED_IN heuristic so
-                # border attractions (e.g. Golden Gate Bridge → Sausalito) are included.
-                if not city_poly.contains(Point(poi.lon, poi.lat)):
+            if buf_poly is not None:
+                if not buf_poly.contains(Point(poi.lon, poi.lat)):
                     continue
             else:
                 # No polygon available — fall back to LOCATED_IN heuristic.
@@ -109,6 +128,9 @@ class RouteKnowledgeGraph:
                 if poi_city is not None and poi_city != short:
                     continue
             result.append(poi)
+
+        _logger.info("get_pois_for_city %r → %d POIs in %.2fs", city_name, len(result), time.perf_counter() - t0)
+        self._city_pois_cache[city_name] = result
         return result
 
     def _city_polygon(self, city_name: str):
@@ -150,6 +172,13 @@ class RouteKnowledgeGraph:
 
     # ── private ────────────────────────────────────────────────────────────
 
+    def _ensure_near_poi_edges(self) -> None:
+        if not self._near_poi_built:
+            t0 = time.perf_counter()
+            self._add_near_poi_edges()
+            self._near_poi_built = True
+            _logger.info("NEAR_POI edges built in %.2fs", time.perf_counter() - t0)
+
     def _build(self) -> None:
         for cat in CATEGORIES:
             self._g.add_node(cat["name"], type="Category", name=cat["name"])
@@ -161,7 +190,7 @@ class RouteKnowledgeGraph:
             self._g.add_node(poi["osm_id"], type="POI", **poi)
         for src, rel, tgt in RELATIONSHIPS:
             self._g.add_edge(src, tgt, rel=rel)
-        self._add_near_poi_edges()
+        # NEAR_POI edges deferred — computed lazily on first enrich_poi() call.
 
     def _add_near_poi_edges(self) -> None:
         poi_nodes = [(n, d) for n, d in self._g.nodes(data=True) if d.get("type") == "POI"]

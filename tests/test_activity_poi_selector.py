@@ -36,10 +36,10 @@ class TestTrackMerge:
         activity_ids = {c.poi.osm_id for c in result if c.matched_activities}
         assert {"1", "2"}.issubset(activity_ids)
 
-    def test_cap_at_three_activity_slots(self, selector):
-        # 4 activities but n_activity_slots = min(4, 3) = 3.
-        # Kayak (monument, score 4) loses to Scenic (viewpoint, score 9) in Track2,
-        # so only the 3 Track1 winners have matched_activities in the final result.
+    def test_cap_at_two_activity_slots(self, selector):
+        # activity_budget = min(2, total_stops-1) = 2; 4 activities compete for 2 slots.
+        # Track1 selects 2 activity POIs; Track2 returns the rest as a scenic pool
+        # (including Kayak and Scenic). rate_pois does the final ranking.
         classified = [
             _cpoi("Hike", "1", activities=["hiking"]),
             _cpoi("Bike", "2", activities=["biking"]),
@@ -50,11 +50,12 @@ class TestTrackMerge:
         result = selector.select(
             classified,
             ["hiking", "biking", "swimming", "kayaking"],
-            total_stops=4,  # 3 activity + 1 scenic
+            total_stops=4,
         )
-        # Track1 fills exactly 3; Track2 prefers Scenic over Kayak (9 > 4)
-        activity_filled = [c for c in result if c.matched_activities]
-        assert len(activity_filled) == 3
+        # All 5 POIs appear in the candidate pool; exactly 2 were selected via Track1 slots.
+        assert len(result) == 5
+        result_ids = {c.poi.osm_id for c in result}
+        assert result_ids == {"1", "2", "3", "4", "5"}
 
     def test_empty_activities_all_scenic(self, selector):
         classified = [
@@ -77,10 +78,12 @@ class TestTrackMerge:
         assert len(result) == 2  # all slots filled as scenic (viewpoint > museum)
         assert {c.poi.osm_id for c in result} == {"1", "2"}
 
-    def test_total_stops_respected(self, selector):
+    def test_scenic_pool_returns_all_available(self, selector):
+        # Track 2 uses n_slots=80 so all POIs are returned as a candidate pool for
+        # rate_pois to rank; total_stops no longer caps the selector output.
         classified = [_cpoi(f"Spot{i}", str(i)) for i in range(10)]
         result = selector.select(classified, [], total_stops=4)
-        assert len(result) == 4
+        assert len(result) == 10
 
 
 class TestScenicFillOrder:
@@ -152,7 +155,8 @@ class TestEdgeCases:
             _cpoi("B", "2", activities=["hiking"]),
         ]
         ranker = RatingRanker()
-        # Should not raise — custom ranker is used for activity slot selection
+        # Custom ranker selects A (rating=4.0) for the 1 activity slot; B lands in
+        # scenic fill (Track 2), so both POIs appear in the candidate pool.
         result = selector.select(
             classified,
             ["hiking"],
@@ -161,5 +165,6 @@ class TestEdgeCases:
             total_stops=1,
             ranker=ranker,
         )
-        assert len(result) == 1
-        assert result[0].poi.osm_id == "1"
+        assert len(result) == 2
+        result_ids = {c.poi.osm_id for c in result}
+        assert "1" in result_ids and "2" in result_ids

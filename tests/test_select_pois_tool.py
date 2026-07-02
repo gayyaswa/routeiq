@@ -108,7 +108,9 @@ class TestEmptyAndEdge:
         assert all(item["track"] == "scenic" for item in result)
         assert all(item["matched_activities"] == [] for item in result)
 
-    def test_total_stops_limits_output(self):
+    def test_scenic_pool_returns_all_available(self):
+        # Track 2 now returns a large scenic pool (n_slots=80) for rate_pois to rank,
+        # so total_stops no longer caps the candidate list — all 10 POIs should come through.
         pois = [_poi(f"Spot{i}", str(i)) for i in range(10)]
         classified = [_cpoi(p) for p in pois]
         clf = MagicMock()
@@ -117,4 +119,4 @@ class TestEmptyAndEdge:
              patch("routeiq.activities.factory.create_activity_classifier", return_value=clf):
             mock_kg.return_value.get_pois_for_city.return_value = pois
             result = _invoke(activities=[], total_stops=3)
-        assert len(result) == 3
+        assert len(result) == 10

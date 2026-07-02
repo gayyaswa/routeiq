@@ -22,6 +22,7 @@ _POI_FIELDS: set[str] | None = None  # lazily populated
 _KNOWLEDGE_TO_ENTRY_FIELDS = (
     "rating", "review_count", "review_snippet", "all_snippets",
     "review_source", "photo_urls", "hours", "visit_duration_min", "composite_score",
+    "description_source", "activity_source",
 )
 
 
@@ -34,18 +35,18 @@ def _poi_fields() -> set[str]:
 
 
 def _wikipedia_weight(wikipedia_tag: str | None) -> float:
-    """English Wikipedia = real significance signal; Cebuano/other = auto-generated stubs."""
+    """English Wikipedia = strong significance signal; non-English = minor; none = 0."""
     if not wikipedia_tag:
         return 0.0
-    return 0.1 if wikipedia_tag.startswith("en:") else 0.01
+    return 0.5 if wikipedia_tag.startswith("en:") else 0.05
 
 
 def _composite_score(rating: float | None, review_count: int | None, wikipedia_tag: str | None) -> float:
-    """Blend rating (40%), review volume (30%), and Wikipedia presence (30%) into one rank score."""
+    """Blend rating (40%), review volume (20%), and Wikipedia presence (40%) into one rank score."""
     r = (rating / 5.0) if rating is not None else 0.5
     v = math.log1p(review_count or 0) / math.log1p(10_000)
     w = _wikipedia_weight(wikipedia_tag)
-    return 0.4 * r + 0.3 * v + 0.3 * w
+    return 0.4 * r + 0.2 * v + 0.4 * w
 
 
 def _keep(entry: dict) -> bool:
@@ -94,6 +95,8 @@ def _build_entry(rp, extra: dict) -> dict:
     entry["composite_score"] = round(
         _composite_score(rp.rating, rp.review_count, rp.poi.wikipedia_tag), 4
     )
+    entry["description_source"] = "wikipedia" if rp.poi.description and rp.poi.wikipedia_tag else ""
+    entry["activity_source"] = ""
     entry.update(extra)
     return entry
 
@@ -171,6 +174,17 @@ def rate_pois(city: str, poi_list_json: str, config: RunnableConfig) -> str:
             _t_rate = time.perf_counter()
             rated = RatingsFactory.create().enrich_batch(city, still_missing)
             _tlog(f"rate_pois provider={time.perf_counter()-_t_rate:.2f}s")
+
+            # Synthetic fallback: any POI still lacking a rating gets LLM-generated data.
+            # This fires when Tavily is rate-limited or returns no numeric rating.
+            no_rating = [rp for rp in rated if rp.rating is None]
+            if no_rating:
+                from routeiq.ratings.llm_synthetic import LLMSyntheticRatingProvider
+                _t_syn = time.perf_counter()
+                syn_rated = LLMSyntheticRatingProvider().enrich_batch(city, [rp.poi for rp in no_rating])
+                _tlog(f"rate_pois synthetic_fallback={time.perf_counter()-_t_syn:.2f}s pois={len(no_rating)}")
+                syn_by_name = {rp.poi.name: rp for rp in syn_rated if rp.rating is not None}
+                rated = [syn_by_name.get(rp.poi.name, rp) if rp.rating is None else rp for rp in rated]
 
             knowledge_entries: list[dict] = []
             for rp in rated:

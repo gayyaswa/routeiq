@@ -38,7 +38,9 @@ def test_city_has_in_region(kg):
 
 
 def test_near_poi_edges_created(kg):
-    # Fort Point and Golden Gate Bridge are ~1.1 km apart — well within 25 km
+    # Fort Point and Golden Gate Bridge are ~1.1 km apart — well within 25 km.
+    # Trigger the lazy NEAR_POI build via enrich_poi (same path the agent uses).
+    kg.enrich_poi(_FORT)
     g = kg.graph
     assert g.has_edge(_FORT, _GGB)
     assert g.edges[_FORT, _GGB]["rel"] == "NEAR_POI"

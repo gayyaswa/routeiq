@@ -98,6 +98,12 @@ class ItineraryStop(BaseModel):
     rating: Optional[float] = None
     review_count: Optional[int] = None
     review_source: Optional[str] = None
+    description_source: Optional[str] = Field(
+        None, description="Copy exactly from rate_pois: 'wikipedia', 'ai_generated', or ''."
+    )
+    activity_source: Optional[str] = Field(
+        None, description="Copy exactly from rate_pois: 'osm', 'ai_generated', or ''."
+    )
     photo_urls: List[str] = Field(
         default_factory=list,
         description="Copy photo_urls exactly from rate_pois tool results. Do not invent URLs.",
@@ -543,6 +549,21 @@ def _plan(state: DayTripState, config: Optional[RunnableConfig] = None) -> dict:
         _extract_tool_content(msg) for msg in messages if isinstance(msg, ToolMessage)
     ) or "No tool results available."
 
+    # Parse rate_pois output to pin the top-5 must-include POIs.
+    # Without this, the LLM freely picks stops and drops high-score landmarks like GGB.
+    _must_include: list[str] = []
+    for msg in messages:
+        if isinstance(msg, ToolMessage) and msg.name == "rate_pois":
+            try:
+                _rated = json.loads(msg.content)
+                if isinstance(_rated, list):
+                    _must_include = [
+                        p["name"] for p in _rated[:5] if isinstance(p, dict) and p.get("name")
+                    ]
+            except Exception:
+                pass
+            break  # use only the first rate_pois call
+
     # Carry refinement feedback into the extraction prompt so the LLM applies it.
     # Start-time changes are not supported via refine — they require a fresh plan —
     # so strip them from the feedback to avoid contradicting state["start_time"].
@@ -571,6 +592,12 @@ def _plan(state: DayTripState, config: Optional[RunnableConfig] = None) -> dict:
         f"use them to build all 8-10 stops.\n"
         if activity_fallback_note else ""
     )
+    _must_include_note = (
+        f"- MANDATORY: These top-rated POIs MUST appear in the stops list: "
+        f"{', '.join(_must_include)}. "
+        f"They are the highest-scoring results from rate_pois — never omit them.\n"
+    ) if _must_include else ""
+
     extraction_messages = [
         HumanMessage(content=(
             f"Extract a structured day trip itinerary from these tool results.\n\n"
@@ -581,6 +608,7 @@ def _plan(state: DayTripState, config: Optional[RunnableConfig] = None) -> dict:
             f"{fallback_note_str}\n\n"
             f"=== TOOL RESULTS ===\n{tool_context}\n=== END TOOL RESULTS ===\n\n"
             f"Rules:\n"
+            f"{_must_include_note}"
             f"- REQUIRED: The 'stops' array must always be present with at least 5 items. "
             f"If the user's context doesn't match the available POIs, include the 5-10 "
             f"highest-rated POIs from the tool results anyway — never omit the stops key.\n"

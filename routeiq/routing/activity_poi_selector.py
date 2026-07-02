@@ -75,9 +75,10 @@ class ActivityPOISelector:
             user_context, ratings, ranker,
         )
         used_ids = {c.poi.osm_id for c in track1}
-        # Use actual track1 length, not budgeted slots — unused activity slots spill to scenic.
-        n_scenic_slots = total_stops - len(track1)
-        track2 = self._build_track2(classified_pois, used_ids, n_scenic_slots)
+        # Track 2 is a small scenic buffer for POIs that genuinely have no activity match
+        # (e.g. generic OSM entries). The 12-tag classifier now directly covers attraction,
+        # nature_reserve, gallery etc. via Track 1, so 15 slots is sufficient.
+        track2 = self._build_track2(classified_pois, used_ids, n_slots=15)
 
         return self._order_by_geography(track1 + track2)
 
